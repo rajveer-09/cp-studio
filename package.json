@@ -1,0 +1,23 @@
+{
+  "name": "cp-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Online editor to write, run and debug C++, Java and Python with test cases and a Gemini AI assistant.",
+  "author": "Rajveer Sharma",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c magenta,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client && npm run build -w server",
+    "start": "node server/dist/index.js",
+    "typecheck": "npm run typecheck -w client && npm run typecheck -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}
