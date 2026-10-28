@@ -1,0 +1,323 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: #eceef3;
+  --panel: #ffffff;
+  --panel-2: #f6f7f9;
+  --hover: #eef0f4;
+  --border: #e0e3ea;
+  --border-strong: #cdd2dc;
+  --fg: #151922;
+  --muted: #5b6375;
+  --subtle: #8a91a3;
+  --accent: #6d4aff;
+  --accent-hover: #5b38f0;
+  --accent-fg: #ffffff;
+  --success: #15a356;
+  --danger: #e5484d;
+  --warning: #d97706;
+  --info: #0b84d8;
+  --shadow: 0 12px 40px rgb(15 20 30 / 0.14);
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #08090d;
+  --panel: #10131a;
+  --panel-2: #151923;
+  --hover: #1b202a;
+  --border: #212733;
+  --border-strong: #2f3644;
+  --fg: #e7e9ef;
+  --muted: #9aa2b4;
+  --subtle: #697185;
+  --accent: #8b6dff;
+  --accent-hover: #9e85ff;
+  --accent-fg: #ffffff;
+  --success: #3dd68c;
+  --danger: #ff6369;
+  --warning: #f5a524;
+  --info: #4cb2ff;
+  --shadow: 0 16px 50px rgb(0 0 0 / 0.55);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-hover: var(--hover);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --shadow-pop: var(--shadow);
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--fg) 18%, transparent) transparent;
+  }
+
+  :focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+    outline-offset: 1px;
+  }
+
+  /* Text fields show focus through their container's border instead. */
+  textarea:focus-visible,
+  input:focus-visible {
+    outline: none;
+  }
+}
+
+/* Resize handles between panels */
+.resize-handle {
+  position: relative;
+  flex: 0 0 8px;
+}
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.resize-handle[data-panel-group-direction='horizontal']::after {
+  inset: 30% 3px;
+}
+.resize-handle[data-panel-group-direction='vertical']::after {
+  inset: 3px 30%;
+}
+.resize-handle[data-resize-handle-state='hover']::after,
+.resize-handle[data-resize-handle-state='drag']::after {
+  opacity: 0.8;
+}
+
+/* Chat markdown */
+.chat-md {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.chat-md > * + * {
+  margin-top: 0.6em;
+}
+.chat-md h1,
+.chat-md h2,
+.chat-md h3,
+.chat-md h4 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1em;
+}
+.chat-md h1 {
+  font-size: 1.15em;
+}
+.chat-md h2 {
+  font-size: 1.08em;
+}
+.chat-md h3,
+.chat-md h4 {
+  font-size: 1em;
+}
+.chat-md ul,
+.chat-md ol {
+  padding-left: 1.3em;
+}
+.chat-md ul {
+  list-style: disc;
+}
+.chat-md ol {
+  list-style: decimal;
+}
+.chat-md li + li {
+  margin-top: 0.25em;
+}
+.chat-md li > p {
+  margin: 0;
+}
+.chat-md a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.chat-md strong {
+  font-weight: 600;
+}
+.chat-md :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0.1em 0.38em;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: color-mix(in srgb, var(--accent) 75%, var(--fg));
+}
+.chat-md blockquote {
+  border-left: 3px solid var(--border-strong);
+  padding-left: 0.8em;
+  color: var(--muted);
+}
+.chat-md table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+.chat-md th,
+.chat-md td {
+  border: 1px solid var(--border);
+  padding: 0.3em 0.6em;
+  text-align: left;
+}
+.chat-md hr {
+  border-color: var(--border);
+}
+
+/* Streaming caret and "thinking" shimmer */
+.stream-caret > p:last-child::after,
+.stream-caret > ul:last-child > li:last-child::after,
+.stream-caret > ol:last-child > li:last-child::after {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+@keyframes caret-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, var(--subtle) 0%, var(--fg) 50%, var(--subtle) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1.6s linear infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* Dialog animations (Radix sets data-state) */
+.dialog-overlay[data-state='open'] {
+  animation: fade-in 140ms ease-out;
+}
+.dialog-content[data-state='open'] {
+  animation: pop-in 160ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.popover[data-state='open'] {
+  animation: pop-in 120ms ease-out;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+/* Debugger: the line the program is paused at, its arrow, and the inline variable values */
+.monaco-editor .debug-line {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+}
+.monaco-editor .debug-line-error {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+.monaco-editor .debug-arrow {
+  background: var(--warning);
+  clip-path: polygon(0 15%, 55% 15%, 100% 50%, 55% 85%, 0 85%);
+  margin-left: 4px;
+  width: 10px !important;
+}
+.monaco-editor .debug-arrow-error {
+  background: var(--danger);
+}
+.monaco-editor .debug-inline-values {
+  color: var(--warning);
+  font-style: italic;
+  opacity: 0.9;
+}
+
+/* "Debug <variable>" button shown above a selected variable */
+.watch-widget {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
+  margin-bottom: 2px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--panel);
+  color: var(--accent);
+  font: 500 11px/1.4 var(--font-sans);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.watch-widget:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+.watch-widget code {
+  font-family: var(--font-mono);
+}
+
+/* Debugger timeline */
+.debug-slider {
+  accent-color: var(--accent);
+  height: 4px;
+  cursor: pointer;
+}
+
+/* Monaco colorized code in chat blocks */
+.colorized {
+  font-family: var(--font-mono);
+  white-space: pre;
+}
