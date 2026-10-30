@@ -4,7 +4,7 @@ import { config } from '../config.js';
 import { cleanPaths, type Workspace } from '../runner/index.js';
 import { cppExecutable, describeExit } from '../runner/languages.js';
 import { MiSession, type MiTuple } from './mi.js';
-import { clip, type TraceOutcome, type TraceStep } from './types.js';
+import { clip, inRanges, type TraceOutcome, type TraceStep } from './types.js';
 
 const SIGNALS: Record<string, string> = {
   SIGSEGV: 'Segmentation fault: invalid memory access or stack overflow',
@@ -12,10 +12,11 @@ const SIGNALS: Record<string, string> = {
   SIGABRT: 'Program aborted (failed assertion or uncaught exception)',
 };
 
-/** Line of each name's first appearance; before it, gdb would only show uninitialised garbage. */
-function firstAppearance(code: string, names: string[]): Map<string, number> {
+/** Line of each name's first appearance outside hidden code; before it, gdb would only show uninitialised garbage. */
+function firstAppearance(code: string, names: string[], hidden: [number, number][]): Map<string, number> {
   const lines = code.split('\n');
-  return new Map(names.map((name) => [name, lines.findIndex((l) => new RegExp(`\\b${name}\\b`).test(l)) + 1 || 1]));
+  const find = (name: string) => lines.findIndex((l, i) => !inRanges(i + 1, hidden) && new RegExp(`\\b${name}\\b`).test(l)) + 1;
+  return new Map(names.map((name) => [name, find(name) || 1]));
 }
 
 /** Last line of main(): once execution gets there, the rest is destructors and runtime shutdown. */
@@ -34,56 +35,84 @@ function mainEndLine(code: string): number {
 }
 
 /**
- * How to read a variable. gdb builds without Python pretty printers (e.g. MinGW) print std::vector and
- * std::string as raw libstdc++ internals, so for those we read the underlying data directly.
+ * How to read a variable. gdb builds without Python pretty printers (e.g. MinGW) print STL containers as
+ * raw libstdc++ internals, so for those we read the underlying data (or, for trees and hash tables, the size).
  */
-type ValueKind = 'plain' | 'vector' | 'string';
-
-function expressionFor(name: string, kind: ValueKind): string {
-  if (kind === 'vector') return `"*${name}._M_impl._M_start@(${name}._M_impl._M_finish - ${name}._M_impl._M_start)"`;
-  if (kind === 'string') return `${name}._M_dataplus._M_p`;
-  return name;
-}
+type ValueKind = 'plain' | 'vector' | 'string' | 'tree' | 'hash';
 
 function kindOf(raw: string): ValueKind {
+  if (raw.includes('_M_node_count')) return 'tree';
+  if (raw.includes('_M_element_count')) return 'hash';
   if (raw.includes('_M_start') && raw.includes('_M_finish')) return 'vector';
   if (raw.includes('_M_dataplus')) return 'string';
   return 'plain';
 }
 
+/** Drops pretty-printer prefixes ("std::vector of length 3, capacity 4 = "), also inside nested containers. */
 function tidy(raw: string): string {
   if (/^std::[\w:]+ (?:of length 0|with 0 elements)/.test(raw)) return '{}';
-  return clip(raw.replace(/^std::[\w:]+ (?:of length \d+(?:, capacity \d+)?|with \d+ elements?) = /, ''));
+  return clip(raw.replace(/std::[\w:]+ (?:of length \d+(?:, capacity \d+)?|with \d+ elements?) = /g, ''));
 }
 
-/** Reads all visible watches with pipelined commands: one round trip per step instead of one per variable. */
-async function readValues(gdb: MiSession, names: string[], kinds: Map<string, ValueKind>): Promise<Record<string, string>> {
-  const values: Record<string, string> = {};
-  const read = (name: string) => {
-    const kind = kinds.get(name) ?? 'plain';
-    return gdb.command(`-data-evaluate-expression ${expressionFor(name, kind)}`).then((result) => ({ name, kind, result }));
-  };
+const MAX_ROWS = 12;
+const MAX_ITEMS = 64;
+type Evaluated = { ok: true; value: string } | { ok: false; outOfScope: boolean };
 
-  const retry: string[] = [];
-  for (const { name, kind, result } of await Promise.all(names.map(read))) {
-    if (result.cls !== 'done') {
-      // "No symbol" means out of scope; for an empty vector the @-expression itself fails.
-      if (kind === 'vector' && !/No symbol/.test(String(result.data.msg))) values[name] = '{}';
-      continue;
-    }
-    const raw = String(result.data.value ?? '');
-    if (kind === 'plain' && kindOf(raw) !== 'plain') {
-      kinds.set(name, kindOf(raw));
-      retry.push(name);
-    } else {
-      values[name] = tidy(raw);
-    }
+async function evaluate(gdb: MiSession, expr: string): Promise<Evaluated> {
+  const result = await gdb.command(`-data-evaluate-expression "${expr}"`);
+  if (result.cls === 'done') return { ok: true, value: String(result.data.value ?? '') };
+  return { ok: false, outOfScope: /No symbol|not in scope/i.test(String(result.data.msg)) };
+}
+
+/** Reads a raw value of a known kind; nested containers (vector<vector<int>>, vector<string>) element by element. */
+async function readAs(gdb: MiSession, expr: string, kind: ValueKind): Promise<string | null> {
+  if (kind === 'tree' || kind === 'hash') {
+    const count = await evaluate(gdb, kind === 'tree' ? `${expr}._M_t._M_impl._M_node_count` : `${expr}._M_h._M_element_count`);
+    return count.ok ? `(${count.value} element${count.value === '1' ? '' : 's'})` : null;
   }
-  for (const { name, result } of await Promise.all(retry.map(read))) {
-    values[name] = result.cls === 'done' ? tidy(String(result.data.value ?? '')) : '{}';
+  if (kind === 'string') {
+    const text = await evaluate(gdb, `${expr}._M_dataplus._M_p`);
+    return text.ok ? tidy(text.value.replace(/^0x[\da-f]+ /i, '')) : null;
   }
+  if (kind === 'plain') {
+    const value = await evaluate(gdb, expr);
+    return value.ok ? tidy(value.value) : null;
+  }
+  const length = `(${expr}._M_impl._M_finish - ${expr}._M_impl._M_start)`;
+  // Capped: a vector that isn't constructed yet can claim any length, and gdb would try to read all of it.
+  const [items, count] = await Promise.all([
+    evaluate(gdb, `*${expr}._M_impl._M_start@(${length} > ${MAX_ITEMS} ? ${MAX_ITEMS} : ${length})`),
+    evaluate(gdb, length),
+  ]);
+  // An empty vector makes the @-expression itself fail.
+  if (!items.ok) return items.outOfScope ? null : '{}';
+  const total = count.ok ? Number(count.value) || 0 : 0;
+  const inner = kindOf(items.value);
+  if (inner === 'plain') return tidy(total > MAX_ITEMS ? items.value.replace(/}$/, ', …}') : items.value);
+  const shown = Math.min(total, MAX_ROWS);
+  const parts = await Promise.all(Array.from({ length: shown }, (_, i) => readAs(gdb, `${expr}._M_impl._M_start[${i}]`, inner)));
+  return clip(`{${parts.map((p) => p ?? '?').join(', ')}${total > shown ? ', …' : ''}}`);
+}
+
+/** Reads all visible watches with pipelined commands, so a step costs about one round trip. */
+async function readValues(gdb: MiSession, names: string[], kinds: Map<string, ValueKind>): Promise<Record<string, string>> {
+  const read = async (name: string): Promise<[string, string | null]> => {
+    const known = kinds.get(name);
+    if (known) return [name, await readAs(gdb, name, known)];
+    const first = await evaluate(gdb, name);
+    if (!first.ok) return [name, null];
+    const kind = kindOf(first.value);
+    if (kind === 'plain') return [name, tidy(first.value)];
+    kinds.set(name, kind);
+    return [name, await readAs(gdb, name, kind)];
+  };
+  const values: Record<string, string> = {};
+  for (const [name, value] of await Promise.all(names.map(read))) if (value !== null) values[name] = value;
   return values;
 }
+
+/** A line with nothing but a closing brace: locals may already be destroyed there, so it isn't recorded. */
+const isClosingBrace = (text: string) => /^\s*}\s*;?\s*(\/\/.*)?$/.test(text);
 
 /**
  * At a variable's declaration line the program hasn't initialised it yet, so its value is garbage.
@@ -95,7 +124,7 @@ function isInitialised(name: string, line: number, prevLine: number | undefined,
   return /^\s*for\s*\(/.test(lines[line - 1] ?? '') && prevLine !== undefined && prevLine > line;
 }
 
-export async function traceCpp(ws: Workspace, code: string, input: string, watches: string[]): Promise<TraceOutcome> {
+export async function traceCpp(ws: Workspace, code: string, input: string, watches: string[], hidden: [number, number][] = []): Promise<TraceOutcome> {
   const { maxSteps, timeLimitMs } = config.debugger;
   const deadline = Date.now() + timeLimitMs;
   await fs.writeFile(path.join(ws.dir, 'input.txt'), input);
@@ -125,19 +154,24 @@ export async function traceCpp(ws: Workspace, code: string, input: string, watch
     if (!stop && gdb.spawnError) throw new Error(`The C++ debugger needs gdb. ${gdb.spawnError}. Install gdb or set GDB in server/.env.`);
     if (!stop) error = 'The debugger could not start the program.';
 
-    // Now inside main() (static initialisers have run). A breakpoint on every function in the user's file
-    // lets us step *over* calls (fast: library code is never entered) yet still stop in the user's functions.
-    await gdb.command('-interpreter-exec console "rbreak main.cpp:."');
+    // Now inside main() (static initialisers have run). A breakpoint at the start of every line of the user's
+    // code: between them the program runs at full speed, so library calls and loops written on one line cost
+    // nothing, yet every line the user wrote (functions, lambdas, recursion) is seen. Hidden code (a LeetCode
+    // harness) gets no breakpoints and runs like library code.
+    const listing = await gdb.command('-symbol-list-lines main.cpp');
+    const codeLines = [...new Set(((listing.data.lines ?? []) as MiTuple[]).map((l) => Number(l.line)))].filter(
+      (l) => l > 0 && !inRanges(l, hidden),
+    );
+    await Promise.all(codeLines.map((l) => gdb.command(`-break-insert main.cpp:${l}`)));
     // Function names from some gdb builds are unreliable, so main() is recognised by its stack depth.
     const mainDepth = Number((await gdb.command('-stack-info-depth')).data.depth);
 
-    const declaredAt = firstAppearance(code, watches);
+    const declaredAt = firstAppearance(code, watches, hidden);
     const lastLineOfMain = mainEndLine(code);
     const sourceLines = code.split('\n');
     const kinds = new Map<string, ValueKind>();
     const lastLineAtDepth = new Map<number, number>();
     let recording = true;
-    let resumedFromLibrary = false;
 
     while (stop) {
       const reason = String(stop.reason ?? '');
@@ -148,7 +182,7 @@ export async function traceCpp(ws: Workspace, code: string, input: string, watch
 
       const frame = (stop.frame ?? {}) as MiTuple;
       const line = Number(frame.line);
-      const inUserCode = typeof frame.file === 'string' && /(^|[\\/])main\.cpp$/.test(frame.file) && line > 0;
+      const inUserCode = typeof frame.file === 'string' && /(^|[\\/])main\.cpp$/.test(frame.file) && line > 0 && !inRanges(line, hidden);
 
       if (reason === 'signal-received') {
         const signal = String(stop['signal-name'] ?? '');
@@ -165,36 +199,36 @@ export async function traceCpp(ws: Workspace, code: string, input: string, watch
       }
 
       if (!recording || !inUserCode) {
-        // Library code, or main() has finished: run until we're back in user code (or the program ends).
-        stop = recording ? ((await gdb.exec('-exec-finish')) ?? (await gdb.exec('-exec-continue'))) : await gdb.exec('-exec-continue');
-        resumedFromLibrary = true;
+        // Hidden code, or main() has finished: run on to the next user line (or the end of the program).
+        stop = await gdb.exec('-exec-continue');
         continue;
       }
 
-      // Returning from a library call lands mid-line; that line was already recorded.
-      if (!resumedFromLibrary) {
-        const candidates = watches.filter((name) => line >= declaredAt.get(name)!);
-        const [depthResult, allValues] = await Promise.all([gdb.command('-stack-info-depth'), readValues(gdb, candidates, kinds)]);
-        const depth = Number(depthResult.data.depth);
-        // Compare with the previous line *in this same function call*, not one inside a callee.
-        const prevLine = lastLineAtDepth.get(depth);
-        for (const d of lastLineAtDepth.keys()) if (d > depth) lastLineAtDepth.delete(d);
-        lastLineAtDepth.set(depth, line);
+      const brace = isClosingBrace(sourceLines[line - 1] ?? '');
+      // On its declaration line a variable isn't constructed yet (reading it can even stall gdb), except in a loop header.
+      const loopHeader = /^\s*for\s*\(/.test(sourceLines[line - 1] ?? '');
+      const candidates = brace ? [] : watches.filter((name) => line > declaredAt.get(name)! || (loopHeader && line === declaredAt.get(name)));
+      const [depthResult, allValues] = await Promise.all([gdb.command('-stack-info-depth'), readValues(gdb, candidates, kinds)]);
+      const depth = Number(depthResult.data.depth);
+      // Compare with the previous line *in this same function call*, not one inside a callee.
+      const prevLine = lastLineAtDepth.get(depth);
+      for (const d of lastLineAtDepth.keys()) if (d > depth) lastLineAtDepth.delete(d);
+      lastLineAtDepth.set(depth, line);
 
+      if (!brace) {
         const values = Object.fromEntries(
           Object.entries(allValues).filter(([name]) => isInitialised(name, line, prevLine, declaredAt, sourceLines)),
         );
         steps.push({ line, values });
-
-        // After main's return statement only destructors and runtime shutdown remain: stop recording.
-        const mayExitMain = line === lastLineOfMain || /^\s*return\b/.test(sourceLines[line - 1] ?? '');
-        if (mayExitMain && depth === mainDepth) {
-          recording = false;
-          await gdb.command('-break-delete');
-        }
       }
-      resumedFromLibrary = false;
-      stop = recording ? await gdb.exec('-exec-next') : await gdb.exec('-exec-continue');
+
+      // After main's return statement only destructors and runtime shutdown remain: stop recording.
+      const mayExitMain = line === lastLineOfMain || /^\s*return\b/.test(sourceLines[line - 1] ?? '');
+      if (mayExitMain && depth === mainDepth) {
+        recording = false;
+        await gdb.command('-break-delete');
+      }
+      stop = await gdb.exec('-exec-continue');
     }
   } finally {
     clearTimeout(killer);

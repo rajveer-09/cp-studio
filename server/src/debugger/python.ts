@@ -3,7 +3,7 @@ import path from 'node:path';
 import { config } from '../config.js';
 import { cleanPaths, MISSING_TOOLCHAIN, type Workspace } from '../runner/index.js';
 import { runProcess } from '../runner/process.js';
-import type { TraceOutcome } from './types.js';
+import { rangesArg, type TraceOutcome } from './types.js';
 
 /** Runs the user's script under sys.settrace, recording watched variables before each line runs. */
 const TRACER = String.raw`
@@ -14,7 +14,13 @@ watches = [w for w in sys.argv[2].split(",") if w]
 max_steps = int(sys.argv[3])
 deadline = time.monotonic() + float(sys.argv[4]) / 1000
 out_path = sys.argv[5]
+# Line ranges of code the user didn't write (a LeetCode harness): never traced or recorded.
+hidden = [tuple(map(int, r.split("-"))) for r in sys.argv[6].split(",") if "-" in r and r != "-"]
 steps = []
+
+
+def is_hidden(line):
+    return any(a <= line <= b for a, b in hidden)
 
 # Bounded repr: a 10^5-element list must not be fully printed on every line.
 short = reprlib.Repr()
@@ -39,7 +45,9 @@ def fmt(value):
 def tracer(frame, event, arg):
     if frame.f_code.co_filename != target:
         return None
-    if event == "line":
+    if event == "call" and frame.f_code.co_name != "<module>" and is_hidden(frame.f_code.co_firstlineno):
+        return None
+    if event == "line" and not is_hidden(frame.f_lineno):
         if len(steps) >= max_steps or time.monotonic() > deadline:
             # Limit reached: save what we have and end the program right here.
             sys.settrace(None)
@@ -77,14 +85,14 @@ finally:
 save(False, error, error_line)
 `;
 
-export async function tracePython(ws: Workspace, input: string, watches: string[]): Promise<TraceOutcome> {
+export async function tracePython(ws: Workspace, input: string, watches: string[], hidden: [number, number][] = []): Promise<TraceOutcome> {
   const { maxSteps, timeLimitMs } = config.debugger;
   await fs.writeFile(path.join(ws.dir, 'cp_tracer.py'), TRACER);
   await fs.rm(path.join(ws.dir, 'trace.json'), { force: true });
 
   const result = await runProcess(
     config.toolchain.python,
-    ['cp_tracer.py', 'main.py', watches.join(','), String(maxSteps), String(timeLimitMs), 'trace.json'],
+    ['cp_tracer.py', 'main.py', watches.join(','), String(maxSteps), String(timeLimitMs), 'trace.json', rangesArg(hidden)],
     { cwd: ws.dir, input, timeoutMs: timeLimitMs + 5000 },
   );
   if (result.spawnError) throw new Error(MISSING_TOOLCHAIN.python);

@@ -10,7 +10,7 @@ import { processSlots } from '../runner/process.js';
 import { traceCpp } from './cpp.js';
 import { traceJava } from './java.js';
 import { tracePython } from './python.js';
-import type { TraceOutcome } from './types.js';
+import { harnessRanges, type TraceOutcome } from './types.js';
 
 export interface TraceRequest {
   language: Language;
@@ -29,14 +29,15 @@ export async function trace(request: TraceRequest): Promise<TraceResponse> {
     return { compile: ws.compile, maxSteps, steps: [], truncated: false, stdout: '', stderr: '', exitCode: null };
   }
 
+  const hidden = harnessRanges(request.code);
   const outcome = await processSlots.use(() => {
     switch (request.language) {
       case 'cpp':
-        return traceCpp(ws, request.code, request.input, request.watches);
+        return traceCpp(ws, request.code, request.input, request.watches, hidden);
       case 'java':
-        return traceJava(ws, request.input, request.watches);
+        return traceJava(ws, request.input, request.watches, hidden);
       case 'python':
-        return tracePython(ws, request.input, request.watches);
+        return tracePython(ws, request.input, request.watches, hidden);
     }
   });
   return { compile: ws.compile, maxSteps, ...outcome };

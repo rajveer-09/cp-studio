@@ -3,12 +3,12 @@ import path from 'node:path';
 import { config } from '../config.js';
 import { MISSING_TOOLCHAIN, WORK_ROOT, type Workspace } from '../runner/index.js';
 import { runProcess } from '../runner/process.js';
-import type { TraceOutcome } from './types.js';
+import { rangesArg, type TraceOutcome } from './types.js';
 
 /**
  * A tiny debugger built on the JDK's Java Debug Interface: launches the user's class, puts a breakpoint
  * on every line of their source file and records the watched variables at each hit.
- * Usage: CpStudioTracer <mainClass> <sourceFile> <watch,watch> <maxSteps> <timeLimitMs> <out.json>
+ * Usage: CpStudioTracer <mainClass> <sourceFile> <watch,watch> <maxSteps> <timeLimitMs> <out.json> <hidden ranges, e.g. 1-20,40-90>
  */
 const TRACER = String.raw`
 import com.sun.jdi.*;
@@ -28,6 +28,13 @@ public class CpStudioTracer {
     static String error = null;
     static int errorLine = -1;
     static boolean truncated = false;
+    // Line ranges of code the user didn't write (a LeetCode harness): no breakpoints there.
+    static final List<int[]> hidden = new ArrayList<>();
+
+    static boolean isHidden(int line) {
+        for (int[] range : hidden) if (line >= range[0] && line <= range[1]) return true;
+        return false;
+    }
 
     public static void main(String[] args) throws Exception {
         String mainClass = args[0];
@@ -36,6 +43,12 @@ public class CpStudioTracer {
         int maxSteps = Integer.parseInt(args[3]);
         long deadline = System.currentTimeMillis() + Long.parseLong(args[4]);
         Path out = Paths.get(args[5]);
+        if (args.length > 6) {
+            for (String range : args[6].split(",")) {
+                String[] bounds = range.split("-");
+                if (bounds.length == 2) hidden.add(new int[] {Integer.parseInt(bounds[0]), Integer.parseInt(bounds[1])});
+            }
+        }
 
         LaunchingConnector connector = Bootstrap.virtualMachineManager().defaultConnector();
         Map<String, Connector.Argument> arguments = connector.defaultArguments();
@@ -132,6 +145,7 @@ public class CpStudioTracer {
         if (!isUserCode(type)) return;
         try {
             for (Location location : type.allLineLocations()) {
+                if (isHidden(location.lineNumber())) continue;
                 BreakpointRequest breakpoint = requests.createBreakpointRequest(location);
                 breakpoint.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD);
                 breakpoint.enable();
@@ -271,7 +285,7 @@ function buildTracer(): Promise<string> {
   return tracerBuild;
 }
 
-export async function traceJava(ws: Workspace, input: string, watches: string[]): Promise<TraceOutcome> {
+export async function traceJava(ws: Workspace, input: string, watches: string[], hidden: [number, number][] = []): Promise<TraceOutcome> {
   const { maxSteps, timeLimitMs } = config.debugger;
   const tracerDir = await buildTracer();
   const className = ws.plan.run.args.at(-1)!;
@@ -279,7 +293,7 @@ export async function traceJava(ws: Workspace, input: string, watches: string[])
 
   const result = await runProcess(
     config.toolchain.java,
-    ['-cp', tracerDir, 'CpStudioTracer', className, ws.plan.sourceFile, watches.join(','), String(maxSteps), String(timeLimitMs), 'trace.json'],
+    ['-cp', tracerDir, 'CpStudioTracer', className, ws.plan.sourceFile, watches.join(','), String(maxSteps), String(timeLimitMs), 'trace.json', rangesArg(hidden)],
     { cwd: ws.dir, input, timeoutMs: timeLimitMs + 10_000 },
   );
   if (result.spawnError) throw new Error(MISSING_TOOLCHAIN.java);
