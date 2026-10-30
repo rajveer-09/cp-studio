@@ -1,5 +1,5 @@
 import { toast } from 'sonner';
-import { useStore } from '../store';
+import { activeFileOf, useStore } from '../store';
 import type { Outcome, TestResult } from '../types';
 import { api, type RunResponse } from './api';
 import { parseDiagnostics } from './diagnostics';
@@ -39,7 +39,8 @@ export async function runTests(mode: 'current' | 'all'): Promise<RunSummary | nu
 
   const { language, settings } = state;
   const tests = mode === 'all' ? state.tests : state.tests.filter((t) => t.id === state.activeTestId);
-  const code = editorBridge.getCode(language);
+  const fileId = activeFileOf(state, language).id;
+  const code = editorBridge.getCode(language, fileId);
   if (!code.trim()) {
     toast.error('Write some code first.');
     return null;
@@ -67,6 +68,7 @@ export async function runTests(mode: 'current' | 'all'): Promise<RunSummary | nu
       compile: response.compile,
       lastRun: {
         language,
+        fileId,
         code,
         testIds: tests.map((t) => t.id),
         maxTimeMs: Math.max(0, ...tests.map((t) => results[t.id].timeMs)),

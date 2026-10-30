@@ -1,12 +1,13 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore, type RefObject } from 'react';
 import { toast } from 'sonner';
 import { api, getAccessKey, setUnauthorizedHandler } from './lib/api';
 import { focusAssistant } from './lib/assistant';
 import { startDebugging, stepBy } from './lib/debugger';
 import { editorBridge } from './lib/editor';
-import { monaco } from './lib/monaco';
+import { toggleAssistant, toggleLayoutLock, toggleTestPanelPosition } from './lib/layout';
 import { isMac } from './lib/platform';
 import { runTests } from './lib/runner';
+import { applyTheme, toggleDarkLight } from './lib/themes';
 import { useStore } from './store';
 import type { Language } from './types';
 
@@ -54,10 +55,12 @@ export function useShortcuts() {
           Digit1: switchTo('cpp'),
           Digit2: switchTo('java'),
           Digit3: switchTo('python'),
-          KeyT: s.toggleTheme,
+          KeyT: toggleDarkLight,
           KeyN: () => s.addTest(),
-          KeyB: () => s.setAssistantOpen(!s.assistantOpen),
-          KeyL: () => s.updateSettings({ ioPosition: s.settings.ioPosition === 'bottom' ? 'right' : 'bottom' }),
+          KeyG: s.serverConfig?.aiEnabled ? () => s.openDialog('generateTests') : undefined,
+          KeyB: toggleAssistant,
+          KeyL: toggleTestPanelPosition,
+          KeyK: toggleLayoutLock,
           Period: debugging ? () => stepBy(1) : undefined,
           Comma: debugging ? () => stepBy(-1) : undefined,
           Slash: () => s.openDialog(s.dialog === 'shortcuts' ? null : 'shortcuts'),
@@ -76,10 +79,9 @@ export function useShortcuts() {
 
 export function useThemeSync() {
   const theme = useStore((s) => s.theme);
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-    monaco.editor.setTheme(theme === 'dark' ? 'cp-dark' : 'cp-light');
-  }, [theme]);
+  const darkness = useStore((s) => s.settings.uiDarkness);
+  const contrast = useStore((s) => s.settings.uiContrast);
+  useEffect(() => applyTheme(theme, { darkness, contrast }), [theme, darkness, contrast]);
 }
 
 export function useServerConfig() {
@@ -106,6 +108,19 @@ export function useServerConfig() {
       clearTimeout(retry);
     };
   }, []);
+}
+
+/** The element's current width in px (0 until it has been measured). */
+export function useElementWidth(ref: RefObject<HTMLElement | null>): number {
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(Math.round(entry.contentRect.width)));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+  return width;
 }
 
 export function useMediaQuery(query: string): boolean {

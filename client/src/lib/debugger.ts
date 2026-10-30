@@ -1,5 +1,5 @@
 import { toast } from 'sonner';
-import { useStore } from '../store';
+import { activeFileOf, useStore } from '../store';
 import type { DebugStep } from '../types';
 import { api } from './api';
 import { isWatchable } from './completions';
@@ -51,8 +51,9 @@ export async function startDebugging() {
   }
 
   const testIndex = Math.max(0, state.tests.findIndex((t) => t.id === state.activeTestId));
-  const code = editorBridge.getCode(language);
-  const base = { language, code, testIndex, watches: [...watches], steps: [], truncated: false, maxSteps: 0, stdout: '', stderr: '' };
+  const fileId = activeFileOf(state, language).id;
+  const code = editorBridge.getCode(language, fileId);
+  const base = { language, fileId, code, testIndex, watches: [...watches], steps: [], truncated: false, maxSteps: 0, stdout: '', stderr: '' };
   useStore.setState({ debug: { ...base, status: 'running' }, debugStep: 0, bottomTab: 'debug' });
 
   try {

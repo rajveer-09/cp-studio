@@ -1,6 +1,5 @@
-import { useStore } from '../store';
+import { activeFileOf, useStore } from '../store';
 import type { Language } from '../types';
-import { LANGUAGE_META } from './languages';
 import { monaco } from './monaco';
 import type { Diagnostic } from './diagnostics';
 
@@ -8,14 +7,43 @@ import type { Diagnostic } from './diagnostics';
 let editor: monaco.editor.IStandaloneCodeEditor | null = null;
 let debugDecorations: monaco.editor.IEditorDecorationsCollection | null = null;
 
-const modelFor = (language: Language) => monaco.editor.getModel(monaco.Uri.parse(LANGUAGE_META[language].file));
+const EXTENSION: Record<Language, string> = { cpp: 'cpp', java: 'java', python: 'py' };
+
+/** Each tab has its own Monaco model (and so its own undo history), keyed by the tab's id. */
+export const modelPath = (language: Language, fileId: string) => `${fileId}.${EXTENSION[language]}`;
+
+const modelFor = (language: Language, fileId = activeFileOf(useStore.getState(), language).id) =>
+  monaco.editor.getModel(monaco.Uri.parse(modelPath(language, fileId)));
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+
+// LeetCode starters keep the code that runs the tests in "LeetCode harness" regions, folded when a file opens.
+const HARNESS = /LeetCode harness/;
+const folded = new WeakSet<monaco.editor.ITextModel>();
+
+function foldHarnessIfNew() {
+  const model = editor?.getModel();
+  if (!editor || !model || folded.has(model) || !HARNESS.test(model.getValue())) return;
+  folded.add(model);
+  const ed = editor;
+  // Folding ranges are computed just after the model loads; ask twice to be safe (folding is idempotent).
+  for (const delay of [80, 400]) setTimeout(() => ed.getModel() === model && ed.getAction('editor.foldAllMarkerRegions')?.run(), delay);
+}
 
 export const editorBridge = {
   attach(instance: monaco.editor.IStandaloneCodeEditor) {
     editor = instance;
     debugDecorations = instance.createDecorationsCollection();
+    instance.onDidChangeModel(foldHarnessIfNew);
+    foldHarnessIfNew();
+  },
+
+  /** Folds the harness regions of a tab again (after its code was replaced), now or when it is next shown. */
+  foldHarness(language: Language, fileId: string) {
+    const model = modelFor(language, fileId);
+    if (!model) return;
+    folded.delete(model);
+    if (editor?.getModel() === model) foldHarnessIfNew();
   },
 
   focus() {
@@ -102,19 +130,26 @@ export const editorBridge = {
     editor.revealLineInCenterIfOutsideViewport(step.line, monaco.editor.ScrollType.Smooth);
   },
 
-  getCode(language: Language): string {
-    return modelFor(language)?.getValue() ?? useStore.getState().code[language];
+  getCode(language: Language, fileId?: string): string {
+    const state = useStore.getState();
+    const id = fileId ?? activeFileOf(state, language).id;
+    return modelFor(language, id)?.getValue() ?? state.files[language].find((f) => f.id === id)?.code ?? '';
   },
 
-  /** Replaces a language's code as a single undoable edit, so Ctrl+Z restores the previous version. */
-  setCode(language: Language, text: string) {
-    const model = modelFor(language);
+  /** Replaces a tab's code as a single undoable edit, so Ctrl+Z restores the previous version. */
+  setCode(language: Language, text: string, fileId?: string) {
+    const id = fileId ?? activeFileOf(useStore.getState(), language).id;
+    const model = modelFor(language, id);
     if (model) {
       model.pushStackElement();
       model.pushEditOperations([], [{ range: model.getFullModelRange(), text }], () => null);
       model.pushStackElement();
     }
-    useStore.getState().setCode(language, text);
+    useStore.getState().setCode(language, text, id);
+  },
+
+  disposeModel(language: Language, fileId: string) {
+    modelFor(language, fileId)?.dispose();
   },
 
   selection(): { startLine: number; endLine: number; text: string } | null {

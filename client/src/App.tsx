@@ -1,4 +1,5 @@
 import { Tooltip } from 'radix-ui';
+import { useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Toaster } from 'sonner';
 import { AssistantPanel } from './components/assistant/AssistantPanel';
@@ -6,17 +7,21 @@ import { BottomPanel } from './components/BottomPanel';
 import { CodeEditor } from './components/CodeEditor';
 import { AccessKeyDialog, ResetDialog, SaveTemplateDialog, SettingsDialog, ShortcutsDialog } from './components/Dialogs';
 import { FixReviewDialog } from './components/FixReviewDialog';
+import { GenerateTestsDialog } from './components/GenerateTestsDialog';
 import { Header } from './components/Header';
 import { StatusBar } from './components/StatusBar';
 import { useMediaQuery, useServerConfig, useShortcuts, useThemeSync } from './hooks';
+import { listenForImports } from './lib/problems';
+import { themeById } from './lib/themes';
 import { useStore } from './store';
 
-const CARD = 'overflow-hidden rounded-xl border border-line bg-panel';
+const CARD = 'overflow-hidden rounded-xl border border-line-strong bg-panel';
 
 function Workspace() {
   const assistantOpen = useStore((s) => s.assistantOpen);
   const narrow = useMediaQuery('(max-width: 900px)');
   const ioRight = useStore((s) => s.settings.ioPosition === 'right') && !narrow;
+  const locked = useStore((s) => s.settings.layoutLocked);
 
   return (
     <PanelGroup direction={narrow ? 'vertical' : 'horizontal'} autoSaveId={narrow ? 'cp-main-narrow' : 'cp-main'}>
@@ -25,7 +30,7 @@ function Workspace() {
           <Panel id="editor" order={1} minSize={20} defaultSize={ioRight ? 58 : 60} className={CARD}>
             <CodeEditor />
           </Panel>
-          <PanelResizeHandle className="resize-handle" />
+          <PanelResizeHandle disabled={locked} className="resize-handle" />
           <Panel id="bottom" order={2} minSize={15} defaultSize={ioRight ? 42 : 40} className={CARD}>
             <BottomPanel />
           </Panel>
@@ -33,7 +38,7 @@ function Workspace() {
       </Panel>
       {assistantOpen && (
         <>
-          <PanelResizeHandle className="resize-handle" />
+          <PanelResizeHandle disabled={locked} className="resize-handle" />
           <Panel id="assistant" order={2} minSize={20} defaultSize={30} className={CARD}>
             <AssistantPanel />
           </Panel>
@@ -47,6 +52,7 @@ export default function App() {
   useThemeSync();
   useShortcuts();
   useServerConfig();
+  useEffect(listenForImports, []);
   const theme = useStore((s) => s.theme);
 
   return (
@@ -64,7 +70,8 @@ export default function App() {
       <AccessKeyDialog />
       <SaveTemplateDialog />
       <ResetDialog />
-      <Toaster theme={theme} position="top-center" offset={60} richColors />
+      <GenerateTestsDialog />
+      <Toaster theme={themeById(theme).dark ? 'dark' : 'light'} position="top-center" offset={60} richColors />
     </Tooltip.Provider>
   );
 }

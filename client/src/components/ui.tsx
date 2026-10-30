@@ -10,7 +10,7 @@ export function cn(...classes: (string | false | null | undefined)[]) {
 }
 
 const VARIANTS = {
-  primary: 'bg-accent text-accent-fg hover:bg-accent-hover shadow-sm shadow-accent/30',
+  primary: 'btn-primary disabled:opacity-100', // styled in index.css; disabled turns neutral instead of faded
   secondary: 'bg-panel-2 text-fg border border-line hover:bg-hover hover:border-line-strong',
   ghost: 'text-muted hover:text-fg hover:bg-hover',
   danger: 'bg-danger/10 text-danger hover:bg-danger/20',

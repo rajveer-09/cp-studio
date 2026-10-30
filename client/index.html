@@ -16,9 +16,15 @@
     <script>
       // Apply the saved theme before the first paint so there is no flash.
       try {
-        var saved = JSON.parse(localStorage.getItem('cp-studio') || '{}').state || {};
-        var theme = saved.theme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-        if (theme === 'dark') document.documentElement.classList.add('dark');
+        var root = document.documentElement;
+        var cached = JSON.parse(localStorage.getItem('cp-studio-theme') || 'null');
+        if (cached) {
+          if (cached.dark) root.classList.add('dark');
+          root.style.colorScheme = cached.dark ? 'dark' : 'light';
+          for (var name in cached.vars) root.style.setProperty(name, cached.vars[name]);
+        } else if (!matchMedia('(prefers-color-scheme: light)').matches) {
+          root.classList.add('dark');
+        }
       } catch (e) {
         document.documentElement.classList.add('dark');
       }

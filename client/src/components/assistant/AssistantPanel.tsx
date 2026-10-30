@@ -3,10 +3,12 @@ import {
   ArrowUp,
   Check,
   CheckCircle2,
+  FileText,
   GitCompare,
   KeyRound,
   PanelRightClose,
   Plus,
+  RotateCcw,
   Sparkles,
   Square,
   TextSelect,
@@ -15,11 +17,13 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { addGeneratedTests, COMMANDS, openFixReview, sendToAssistant, stopAssistant, type AssistantCommand } from '../../lib/assistant';
+import { addGeneratedTests, COMMANDS, openFixReview, retryMessage, sendToAssistant, stopAssistant, type AssistantCommand } from '../../lib/assistant';
 import { LANGUAGE_META, TONE_BG, VERDICT_META } from '../../lib/languages';
+import { changeLayout } from '../../lib/layout';
 import { testVerdict } from '../../lib/verdict';
 import { useStore } from '../../store';
 import type { ChatMessage } from '../../types';
+import { PremiumIcon } from '../PremiumIcon';
 import { Button, cn, Tip } from '../ui';
 import { Markdown } from './Markdown';
 
@@ -135,7 +139,7 @@ function MessageItem({ message }: { message: ChatMessage }) {
 
   return (
     <div className="flex gap-2.5">
-      <div className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-accent to-accent-hover text-white">
+      <div className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-lg bg-panel-2 text-accent ring-1 ring-line">
         <Sparkles className="size-3.5" />
       </div>
       <div className="min-w-0 flex-1 text-[13px]">
@@ -144,7 +148,18 @@ function MessageItem({ message }: { message: ChatMessage }) {
         ) : message.status === 'error' ? (
           <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/8 px-3 py-2 text-danger">
             <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-            <span>{message.content}</span>
+            <span className="min-w-0 flex-1">{message.content}</span>
+            <Button size="sm" variant="ghost" onClick={() => retryMessage(message.id)} className="-my-1 -mr-1.5 h-6 shrink-0 text-danger hover:text-danger">
+              <RotateCcw />
+              Try again
+            </Button>
+          </div>
+        ) : message.icon ? (
+          <div className="flex items-start gap-1.5">
+            <PremiumIcon name={message.icon} className="mt-px text-[15px]" />
+            <div className="min-w-0 flex-1">
+              <Markdown content={message.content} />
+            </div>
           </div>
         ) : (
           <Markdown content={message.content} streaming={message.status === 'streaming'} />
@@ -159,7 +174,7 @@ function MessageItem({ message }: { message: ChatMessage }) {
 function Welcome() {
   return (
     <div className="flex min-h-full flex-col items-center justify-center px-2 py-6 text-center">
-      <div className="mb-3 grid size-11 place-items-center rounded-2xl bg-accent/12 text-accent">
+      <div className="mb-3 grid size-11 place-items-center rounded-xl bg-panel-2 text-accent ring-1 ring-line">
         <Sparkles className="size-5" />
       </div>
       <h3 className="text-[15px] font-semibold">How can I help?</h3>
@@ -199,6 +214,7 @@ function Composer() {
   const selection = useStore((s) => s.selection);
   const activeIndex = useStore((s) => s.tests.findIndex((t) => t.id === s.activeTestId));
   const verdict = useStore((s) => (s.lastRun?.language === s.language ? testVerdict(s, s.activeTestId) : undefined));
+  const problemTitle = useStore((s) => s.problemMeta?.title ?? (s.problem.trim() ? 'Problem statement' : ''));
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const slash = /^\/(\w*)$/.exec(text);
@@ -293,6 +309,14 @@ function Composer() {
             Case {activeIndex + 1}: {VERDICT_META[verdict].short}
           </Chip>
         )}
+        {problemTitle && (
+          <span title="The assistant reads this problem with every request" className="flex min-w-0">
+            <Chip className="min-w-0 border-info/30 text-info">
+              <FileText className="shrink-0" />
+              <span className="truncate">{problemTitle}</span>
+            </Chip>
+          </span>
+        )}
       </div>
 
       <div className="flex items-end gap-2 rounded-xl border border-line bg-panel-2/60 p-1.5 pl-3 transition focus-within:border-accent/60">
@@ -343,6 +367,7 @@ export function AssistantPanel() {
   const config = useStore((s) => s.serverConfig);
   const busy = useStore((s) => s.aiBusy);
   const { clearChat, setAssistantOpen } = useStore.getState();
+  const fallback = config?.aiKeys?.activeModel && config.aiKeys.available === 0;
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const lastCount = useRef(chat.length);
@@ -366,7 +391,13 @@ export function AssistantPanel() {
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line pr-1.5 pl-3">
         <Sparkles className="size-4 text-accent" />
         <span className="text-[13px] font-semibold">AI Assistant</span>
-        {config?.aiEnabled && <span className="truncate rounded-full bg-panel-2 px-2 py-0.5 text-[11px] text-muted">{config.model}</span>}
+        {config?.aiEnabled && (
+          <Tip label={fallback ? 'The main model’s daily quota is used up on every key, so a lighter model is answering until it refills' : 'Model in use'}>
+            <span className={cn('truncate rounded-full px-2 py-0.5 text-[11px]', fallback ? 'bg-warning/12 text-warning' : 'bg-panel-2 text-muted')}>
+              {config.model}
+            </span>
+          </Tip>
+        )}
         <div className="flex-1" />
         {chat.length > 0 && (
           <Tip label="Clear chat">
@@ -376,7 +407,7 @@ export function AssistantPanel() {
           </Tip>
         )}
         <Tip label="Hide assistant" keys={['Alt', 'B']}>
-          <Button variant="ghost" size="icon-sm" onClick={() => setAssistantOpen(false)} aria-label="Hide assistant">
+          <Button variant="ghost" size="icon-sm" onClick={() => changeLayout(() => setAssistantOpen(false))} aria-label="Hide assistant">
             <PanelRightClose />
           </Button>
         </Tip>

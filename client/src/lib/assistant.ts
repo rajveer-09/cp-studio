@@ -1,11 +1,12 @@
 import { toast } from 'sonner';
-import { useStore } from '../store';
+import { activeFileOf, useStore } from '../store';
 import type { ChatMessage, Language } from '../types';
 import { api, type AiContext } from './api';
 import { normalizeLines } from './compare';
 import { editorBridge } from './editor';
 import { isFailing, VERDICT_META } from './languages';
 import { keyLabel } from './platform';
+import { problemForAi } from './problems';
 import { runTests } from './runner';
 import { testVerdict } from './verdict';
 
@@ -38,8 +39,10 @@ const sameCode = (a: string, b: string) => normalizeLines(a).join('\n') === norm
 
 export function buildContext(): AiContext {
   const s = useStore.getState();
-  const code = editorBridge.getCode(s.language);
-  const resultsValid = s.lastRun?.language === s.language;
+  const fileId = activeFileOf(s, s.language).id;
+  const code = editorBridge.getCode(s.language, fileId);
+  // Results from another language or another tab say nothing about this code.
+  const resultsValid = s.lastRun?.language === s.language && s.lastRun.fileId === fileId;
 
   const indexed = s.tests.map((test, i) => ({
     test,
@@ -55,7 +58,7 @@ export function buildContext(): AiContext {
     language: s.language,
     cppStandard: s.settings.cppStandard,
     code,
-    problem: s.problem,
+    problem: problemForAi(s),
     selection: editorBridge.selection(),
     compile: resultsValid && s.compile ? { ok: s.compile.ok, output: s.compile.output } : null,
     resultsStale: resultsValid && s.lastRun!.code !== code,
@@ -75,7 +78,7 @@ export function buildContext(): AiContext {
 function historyForModel(chat: ChatMessage[]) {
   return chat
     .filter((m) => (m.status === 'done' || m.status === undefined) && (m.content.trim() || m.fix))
-    .slice(-12)
+    .slice(-8) // the server keeps only the last 8 turns
     .map((m) => ({
       role: m.role,
       content: m.fix ? `${m.content}\n\n(I proposed a fix: ${m.fix.summary} The user ${m.fix.status} it.)` : m.content,
@@ -128,10 +131,25 @@ export async function sendToAssistant(raw: string): Promise<void> {
   } finally {
     controller = null;
     useStore.setState({ aiBusy: false });
+    refreshModel();
   }
 }
 
+/** The server switches to a fallback model when quota runs out; keep the model chip current. */
+const refreshModel = () => void api.config().then((serverConfig) => useStore.setState({ serverConfig }), () => {});
+
+/** Sends the user message behind a failed reply again, replacing the failed exchange. */
+export function retryMessage(replyId: string) {
+  const { chat, aiBusy } = useStore.getState();
+  const index = chat.findIndex((m) => m.id === replyId);
+  const question = chat[index - 1];
+  if (aiBusy || index < 1 || question.role !== 'user') return;
+  useStore.setState({ chat: chat.filter((m) => m.id !== replyId && m.id !== question.id) });
+  void sendToAssistant(question.content);
+}
+
 async function requestFix(replyId: string, context: AiContext, instruction: string, signal: AbortSignal) {
+  const fileId = activeFileOf(useStore.getState(), context.language).id;
   const fix = await api.fix({ context, instruction }, signal);
   const unchanged = sameCode(fix.fixedCode, context.code);
 
@@ -142,7 +160,7 @@ async function requestFix(replyId: string, context: AiContext, instruction: stri
   useStore.getState().updateMessage(replyId, {
     status: 'done',
     content: parts.join('\n\n'),
-    fix: unchanged ? undefined : { ...fix, originalCode: context.code, language: context.language, status: 'pending' },
+    fix: unchanged ? undefined : { ...fix, originalCode: context.code, language: context.language, fileId, status: 'pending' },
   });
   if (!unchanged) openFixReview(replyId);
 }
@@ -173,13 +191,27 @@ export function openFixReview(messageId: string) {
   const fix = useStore.getState().chat.find((m) => m.id === messageId)?.fix;
   if (!fix) return;
   useStore.setState({
-    review: { code: fix.fixedCode, language: fix.language, title: 'Review AI fix', summary: fix.summary, basedOn: fix.originalCode, messageId },
+    review: {
+      code: fix.fixedCode,
+      language: fix.language,
+      fileId: fix.fileId,
+      title: 'Review AI fix',
+      summary: fix.summary,
+      basedOn: fix.originalCode,
+      messageId,
+    },
   });
 }
 
 export function reviewCodeBlock(code: string, language: Language) {
   useStore.setState({
-    review: { code, language, title: 'Apply code from chat', summary: 'This replaces your whole file with the code block. Check the diff first.' },
+    review: {
+      code,
+      language,
+      fileId: activeFileOf(useStore.getState(), language).id,
+      title: 'Apply code from chat',
+      summary: 'This replaces your whole file with the code block. Check the diff first.',
+    },
   });
 }
 
@@ -195,25 +227,30 @@ export async function acceptReview(finalCode: string) {
   const review = state.review;
   if (!review) return;
 
+  // Apply to the tab the change was made for, and bring that tab into view.
+  const fileId = state.files[review.language].some((f) => f.id === review.fileId) ? review.fileId! : activeFileOf(state, review.language).id;
   if (review.language !== state.language) state.setLanguage(review.language);
-  editorBridge.setCode(review.language, finalCode);
+  state.selectFile(review.language, fileId);
+  editorBridge.setCode(review.language, finalCode, fileId);
   if (review.messageId) state.updateMessage(review.messageId, (m) => (m.fix ? { fix: { ...m.fix, status: 'applied' } } : {}));
   useStore.setState({ review: null });
   toast.success('Changes applied', { description: `Press ${keyLabel('Mod')}+Z in the editor to undo.` });
   editorBridge.focus();
 
-  if (!useStore.getState().tests.some((t) => t.input.trim() || t.expected.trim())) return;
+  if (review.runTestsAfter === false || !useStore.getState().tests.some((t) => t.input.trim() || t.expected.trim())) return;
   const summary = await runTests('all');
   if (!summary) return;
 
+  const allPassed = summary.compileOk && summary.passed === summary.total;
   const content = !summary.compileOk
     ? 'I re-ran your tests after applying the change, but **compilation failed**. Check the output panel, or ask me to `/fix` it.'
-    : summary.passed === summary.total
+    : allPassed
       ? summary.total === 1
-        ? '✅ I re-ran your test after applying the change and **it passed**.'
-        : `✅ I re-ran all ${summary.total} tests after applying the change and **all of them passed**.`
+        ? 'I re-ran your test after applying the change and **it passed**.'
+        : `I re-ran all ${summary.total} tests after applying the change and **all of them passed**.`
       : `I re-ran your tests after applying the change: **${summary.passed}/${summary.total} passed**. Still failing: ${summary.failing
           .map((f) => `Test ${f.index} (${f.verdict})`)
           .join(', ')}. Try \`/debug\` or \`/fix\` again.`;
-  useStore.getState().addMessage({ role: 'assistant', content, status: 'done' });
+  const icon = !summary.compileOk ? 'warning' : allPassed ? 'check' : 'cross';
+  useStore.getState().addMessage({ role: 'assistant', content, status: 'done', icon });
 }

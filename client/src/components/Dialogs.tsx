@@ -4,11 +4,13 @@ import { toast } from 'sonner';
 import { api, getAccessKey, setAccessKey } from '../lib/api';
 import { editorBridge } from '../lib/editor';
 import { LANGUAGE_META } from '../lib/languages';
+import { changeIoFontSize, changeLayout, IO_FONT, toggleLayoutLock } from '../lib/layout';
 import { keyLabel } from '../lib/platform';
 import { SHORTCUTS } from '../lib/shortcuts';
 import { BUILTIN_TEMPLATES } from '../lib/templates';
 import { uid, useStore } from '../store';
 import type { CompareMode, CppStandard } from '../types';
+import { ThemeAdjustments, ThemeGrid } from './ThemePicker';
 import { Button, Kbd, Modal, Segmented, Switch } from './ui';
 
 const close = () => useStore.getState().openDialog(null);
@@ -39,8 +41,7 @@ export function SettingsDialog() {
   const settings = useStore((s) => s.settings);
   const maxTimeLimit = useStore((s) => s.serverConfig?.limits.maxTimeLimitMs ?? 10_000);
   const accessKeyRequired = useStore((s) => s.serverConfig?.accessKeyRequired);
-  const theme = useStore((s) => s.theme);
-  const { updateSettings, openDialog, toggleTheme } = useStore.getState();
+  const { updateSettings, openDialog } = useStore.getState();
 
   const resetEverything = () => {
     if (!confirm('Reset all code, test cases, templates and chat saved in this browser? This cannot be undone.')) return;
@@ -50,21 +51,33 @@ export function SettingsDialog() {
 
   return (
     <Modal open={open} onClose={close} title="Settings" width="lg">
-      <Section title="Appearance">
-        <Row label="Theme" hint="Shortcut: Alt+T">
-          <Segmented
-            value={theme}
-            onChange={(next) => next !== theme && toggleTheme()}
-            options={[
-              { value: 'dark', label: 'Dark' },
-              { value: 'light', label: 'Light' },
-            ]}
-          />
+      <Section title="Theme">
+        <ThemeGrid />
+        <div className="py-3">
+          <div className="mb-2.5 text-xs text-muted">Darkness and contrast (whole app and editor)</div>
+          <ThemeAdjustments />
+        </div>
+      </Section>
+
+      <Section title="Layout">
+        <Row label="Lock layout" hint="Panels can't be resized, moved or hidden by accident. Shortcut: Alt+K">
+          <Switch label="Lock layout" checked={settings.layoutLocked} onChange={toggleLayoutLock} />
+        </Row>
+        <Row label="Test case text size" hint="Input, expected and output columns. Also Ctrl + mouse wheel over them">
+          <div className="flex items-center gap-1">
+            <Button size="icon-sm" onClick={() => changeIoFontSize(-1)} disabled={settings.ioFontSize <= IO_FONT.min} aria-label="Smaller test case text">
+              <Minus />
+            </Button>
+            <span className="w-8 text-center font-mono text-[13px]">{settings.ioFontSize}</span>
+            <Button size="icon-sm" onClick={() => changeIoFontSize(1)} disabled={settings.ioFontSize >= IO_FONT.max} aria-label="Larger test case text">
+              <Plus />
+            </Button>
+          </div>
         </Row>
         <Row label="Test cases panel" hint="Shortcut: Alt+L">
           <Segmented
             value={settings.ioPosition}
-            onChange={(ioPosition) => updateSettings({ ioPosition })}
+            onChange={(ioPosition) => changeLayout(() => updateSettings({ ioPosition }))}
             options={[
               { value: 'bottom', label: 'Bottom' },
               { value: 'right', label: 'Right' },

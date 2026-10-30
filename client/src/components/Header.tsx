@@ -1,33 +1,29 @@
-import { AlertTriangle, ChevronDown, FileCode2, Keyboard, ListChecks, Moon, Play, Save, Settings, Sparkles, Sun, Trash2 } from 'lucide-react';
+import { AlertTriangle, ChevronDown, FileCode2, Keyboard, ListChecks, Lock, LockOpen, Play, Save, Settings, Sparkles, Trash2 } from 'lucide-react';
 import { DropdownMenu } from 'radix-ui';
 import { toast } from 'sonner';
 import { editorBridge } from '../lib/editor';
 import { LANGUAGE_META, LANGUAGES } from '../lib/languages';
+import { toggleAssistant, toggleLayoutLock } from '../lib/layout';
 import { keyLabel } from '../lib/platform';
 import { runTests } from '../lib/runner';
 import { BUILTIN_TEMPLATES } from '../lib/templates';
 import { useStore } from '../store';
 import type { Template } from '../types';
+import { ThemeMenu } from './ThemePicker';
 import { Button, cn, Tip } from './ui';
 
+/** Angle brackets around a text cursor, drawn in the text color so the mark suits every theme. */
 function Logo() {
   return (
-    <svg viewBox="0 0 32 32" className="size-7 shrink-0" aria-hidden>
+    <svg viewBox="0 0 24 24" className="size-[22px] shrink-0" aria-hidden>
       <defs>
-        <linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#9b7bff" />
-          <stop offset="1" stopColor="#5b38f0" />
+        <linearGradient id="logo-caret" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" style={{ stopColor: 'var(--accent-hover)' }} />
+          <stop offset="1" style={{ stopColor: 'var(--accent)' }} />
         </linearGradient>
       </defs>
-      <rect width="32" height="32" rx="8" fill="url(#logo-g)" />
-      <path
-        d="M12.5 10.5 7 16l5.5 5.5M19.5 10.5 25 16l-5.5 5.5"
-        fill="none"
-        stroke="#fff"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d="M8.25 6.5 3 12l5.25 5.5M15.75 6.5 21 12l-5.25 5.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="11" y="7.25" width="2" height="9.5" rx="1" fill="url(#logo-caret)" />
     </svg>
   );
 }
@@ -138,16 +134,16 @@ function TemplateMenu() {
 
 export function Header() {
   const running = useStore((s) => s.running);
-  const theme = useStore((s) => s.theme);
   const assistantOpen = useStore((s) => s.assistantOpen);
-  const { toggleTheme, openDialog, setAssistantOpen } = useStore.getState();
+  const locked = useStore((s) => s.settings.layoutLocked);
+  const { openDialog } = useStore.getState();
 
   return (
     <header className="flex h-13 shrink-0 items-center gap-1.5 overflow-x-auto px-2 sm:gap-3 sm:px-3">
-      <div className="hidden items-center gap-2 pr-1 sm:flex">
+      <div className="hidden items-center gap-2 pr-1 text-fg sm:flex">
         <Logo />
-        <span className="hidden text-[15px] font-semibold tracking-tight whitespace-nowrap lg:block">
-          CP <span className="text-accent">Studio</span>
+        <span className="hidden text-[15px] font-semibold tracking-[-0.015em] whitespace-nowrap lg:block">
+          CP <span className="font-medium text-muted">Studio</span>
         </span>
       </div>
       <LanguageSwitcher />
@@ -170,9 +166,17 @@ export function Header() {
 
       <div className="mx-0.5 hidden h-5 w-px bg-line sm:block" />
 
-      <Tip label={theme === 'dark' ? 'Light mode' : 'Dark mode'} keys={['Alt', 'T']}>
-        <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme" className="hidden sm:inline-flex">
-          {theme === 'dark' ? <Sun /> : <Moon />}
+      <ThemeMenu />
+      <Tip label={locked ? 'Layout locked: click to unlock' : 'Lock the layout (panels can’t be resized or moved)'} keys={['Alt', 'K']}>
+        <Button
+          variant={locked ? 'secondary' : 'ghost'}
+          size="icon"
+          onClick={toggleLayoutLock}
+          aria-label={locked ? 'Unlock layout' : 'Lock layout'}
+          aria-pressed={locked}
+          className={cn(locked && 'text-accent')}
+        >
+          {locked ? <Lock /> : <LockOpen />}
         </Button>
       </Tip>
       <Tip label="Keyboard shortcuts" keys={['Alt', '/']}>
@@ -188,8 +192,8 @@ export function Header() {
       <Tip label={assistantOpen ? 'Hide assistant' : 'Show assistant'} keys={['Alt', 'B']}>
         <Button
           variant={assistantOpen ? 'secondary' : 'ghost'}
-          onClick={() => setAssistantOpen(!assistantOpen)}
-          className={cn(assistantOpen && 'text-accent')}
+          onClick={toggleAssistant}
+          className={cn('[&_svg]:text-accent', assistantOpen && 'text-fg')}
           aria-label="Toggle AI assistant"
         >
           <Sparkles />

@@ -3,11 +3,13 @@ import { memo, useEffect, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { reviewCodeBlock } from '../../lib/assistant';
+import { remarkEmojiIcons } from '../../lib/emojiIcons';
 import { LANGUAGE_META, languageFromFence } from '../../lib/languages';
 import { monaco } from '../../lib/monaco';
 import { copyText } from '../../lib/platform';
 import { useStore } from '../../store';
 import type { Language } from '../../types';
+import { PremiumIcon, type IconName } from '../PremiumIcon';
 import { cn } from '../ui';
 
 /** Only offer "Review & apply" for blocks that look like a whole program, not a fragment. */
@@ -78,10 +80,14 @@ export const Markdown = memo(function Markdown({ content, streaming }: { content
   return (
     <div className={cn('chat-md', streaming && 'stream-caret')}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkEmojiIcons]}
         components={{
           pre: ({ children }) => <>{children}</>,
           code: Code,
+          span: ({ node: _node, ...props }) => {
+            const icon = (props as Record<string, unknown>)['data-icon'] as IconName | undefined;
+            return icon ? <PremiumIcon name={icon} /> : <span {...props} />;
+          },
           a: ({ href, children }) => (
             <a href={href} target="_blank" rel="noreferrer">
               {children}

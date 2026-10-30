@@ -1,7 +1,7 @@
 import type { Language, Template } from '../types';
 
-// The "Multi-test" templates all solve the default sample (print the max of each array),
-// so a first Run shows a green "Accepted".
+// The "Multi-test" templates read the number of test cases and call solve() for each one;
+// the solution itself is left to write.
 
 const CPP_MULTI = `#include <bits/stdc++.h>
 using namespace std;
@@ -10,12 +10,8 @@ using ll = long long;
 #define all(x) (x).begin(), (x).end()
 
 void solve() {
-    int n;
-    cin >> n;
-    vector<ll> a(n);
-    for (auto &x : a) cin >> x;
+    // write your code here
 
-    cout << *max_element(all(a)) << '\\n';
 }
 
 int main() {
@@ -97,10 +93,8 @@ public class Main {
     static final PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(System.out)));
 
     static void solve() {
-        int n = in.nextInt();
-        long best = Long.MIN_VALUE;
-        for (int i = 0; i < n; i++) best = Math.max(best, in.nextLong());
-        out.println(best);
+        // write your code here: read with in.nextInt(), print with out.println()
+
     }
 
     public static void main(String[] args) {
@@ -146,9 +140,8 @@ input = sys.stdin.readline
 
 
 def solve():
-    n = int(input())
-    a = list(map(int, input().split()))
-    print(max(a))
+    # write your code here
+    pass
 
 
 def main():
@@ -214,3 +207,28 @@ export const DEFAULT_CODE: Record<Language, string> = {
   java: JAVA_MULTI,
   python: PYTHON_MULTI,
 };
+
+// solve() bodies: today's, and the first templates' (which printed the max of an array).
+const SOLVE_BODIES: Record<Language, { now: string; old: string }> = {
+  cpp: {
+    now: '    // write your code here\n\n',
+    old: "    int n;\n    cin >> n;\n    vector<ll> a(n);\n    for (auto &x : a) cin >> x;\n\n    cout << *max_element(all(a)) << '\\n';\n",
+  },
+  java: {
+    now: '        // write your code here: read with in.nextInt(), print with out.println()\n\n',
+    old: '        int n = in.nextInt();\n        long best = Long.MIN_VALUE;\n        for (int i = 0; i < n; i++) best = Math.max(best, in.nextLong());\n        out.println(best);\n',
+  },
+  python: {
+    now: '    # write your code here\n    pass\n',
+    old: '    n = int(input())\n    a = list(map(int, input().split()))\n    print(max(a))\n',
+  },
+};
+
+const normalize = (code: string) => code.replace(/\r\n?/g, '\n').replace(/[ \t]+$/gm, '').trimEnd();
+
+/** A tab still exactly as an old Multi-test template left it gets today's template; edited code is kept. */
+export function upgradeUntouchedTemplate(language: Language, code: string): string {
+  const { now, old } = SOLVE_BODIES[language];
+  const oldTemplate = DEFAULT_CODE[language].replace(now, old);
+  return normalize(code) === normalize(oldTemplate) ? DEFAULT_CODE[language] : code;
+}

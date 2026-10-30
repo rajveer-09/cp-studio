@@ -7,6 +7,7 @@ import { acceptReview, rejectReview } from '../lib/assistant';
 import { normalizeLines } from '../lib/compare';
 import { editorBridge } from '../lib/editor';
 import { LANGUAGE_META } from '../lib/languages';
+import { monacoThemeName } from '../lib/themes';
 import type { monaco } from '../lib/monaco';
 import { useStore } from '../store';
 import { Button, Kbd, Segmented } from './ui';
@@ -34,7 +35,7 @@ export function FixReviewDialog() {
     }
   }, [review]);
 
-  const current = useMemo(() => (review ? editorBridge.getCode(review.language) : ''), [review]);
+  const current = useMemo(() => (review ? editorBridge.getCode(review.language, review.fileId) : ''), [review]);
   const changedSince =
     review?.basedOn !== undefined && normalizeLines(review.basedOn).join('\n') !== normalizeLines(current).join('\n');
 
@@ -96,7 +97,7 @@ export function FixReviewDialog() {
                   original={current}
                   modified={review.code}
                   language={LANGUAGE_META[review.language].monaco}
-                  theme={theme === 'dark' ? 'cp-dark' : 'cp-light'}
+                  theme={monacoThemeName(theme)}
                   keepCurrentOriginalModel
                   keepCurrentModifiedModel
                   onMount={(editor) => {
@@ -123,7 +124,8 @@ export function FixReviewDialog() {
 
               <div className="flex items-center gap-3 border-t border-line px-5 py-3">
                 <span className="hidden text-xs text-subtle md:block">
-                  You can edit the proposed code before accepting. Accepting is one undo step (<Kbd keys={['Mod', 'Z']} />) and re-runs your tests.
+                  You can edit the proposed code before accepting. Accepting is one undo step (<Kbd keys={['Mod', 'Z']} />)
+                  {review.runTestsAfter === false ? '.' : ' and re-runs your tests.'}
                 </span>
                 <div className="flex-1" />
                 <Button onClick={rejectReview}>
@@ -132,7 +134,7 @@ export function FixReviewDialog() {
                 </Button>
                 <Button variant="primary" onClick={accept}>
                   <Check />
-                  Accept &amp; run tests
+                  {review.runTestsAfter === false ? 'Accept' : 'Accept & run tests'}
                   <Kbd keys={['Alt', 'Y']} inverted />
                 </Button>
               </div>

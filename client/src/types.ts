@@ -1,11 +1,19 @@
 export type Language = 'cpp' | 'java' | 'python';
 export type CppStandard = 'c++14' | 'c++17' | 'c++20' | 'c++23';
-export type Theme = 'dark' | 'light';
+/** An id from lib/themes.ts. */
+export type Theme = string;
 
 export interface TestCase {
   id: string;
   input: string;
   expected: string;
+}
+
+/** An editor tab. */
+export interface CodeFile {
+  id: string;
+  name: string;
+  code: string;
 }
 
 export type Outcome = 'ok' | 'TLE' | 'RE' | 'CE' | 'OLE' | 'IE';
@@ -36,6 +44,7 @@ export interface CompileInfo {
 
 export interface LastRun {
   language: Language;
+  fileId: string;
   code: string;
   testIds: string[];
   maxTimeMs: number;
@@ -58,6 +67,13 @@ export interface Settings {
   floatTolerance: number;
   ignoreCase: boolean;
   ioPosition: 'bottom' | 'right';
+  /** Text size in the test case input / expected / output columns. */
+  ioFontSize: number;
+  /** Adjustments on top of the theme, -100 to 100: surfaces darker/lighter, text sharper/softer. */
+  uiDarkness: number;
+  uiContrast: number;
+  /** Panels can't be resized, moved or shown/hidden while locked. */
+  layoutLocked: boolean;
 }
 
 export interface Template {
@@ -70,7 +86,29 @@ export interface Template {
 }
 
 export type BottomTab = 'tests' | 'console' | 'debug' | 'problem';
-export type DialogName = 'settings' | 'shortcuts' | 'access' | 'saveTemplate' | 'reset';
+export type DialogName = 'settings' | 'shortcuts' | 'access' | 'saveTemplate' | 'reset' | 'generateTests';
+
+export type Platform = 'codeforces' | 'codechef' | 'leetcode' | 'atcoder';
+
+export interface ImportedProblem {
+  platform: Platform;
+  id: string;
+  title: string;
+  url: string;
+  statement: string;
+  tests: { input: string; expected: string }[];
+  timeLimitMs?: number;
+  /** LeetCode: the solution is a method, not a program reading stdin. */
+  functionBased?: boolean;
+  snippets?: Partial<Record<Language, string>>;
+  /** LeetCode: the snippet wrapped in a harness (folded in the editor) that runs one test from stdin. */
+  programs?: Partial<Record<Language, string>>;
+}
+
+export type ProblemMeta = Omit<ImportedProblem, 'statement' | 'tests'> & {
+  /** The judge's sample tests, so they can be restored later. */
+  samples?: { input: string; expected: string }[];
+};
 
 /** The program is paused *before* `line` runs; `values` holds each watched variable in scope. */
 export interface DebugStep {
@@ -81,6 +119,7 @@ export interface DebugStep {
 export interface DebugSession {
   status: 'running' | 'done' | 'error';
   language: Language;
+  fileId: string;
   code: string;
   testIndex: number;
   watches: string[];
@@ -101,6 +140,7 @@ export interface FixProposal {
   summary: string;
   fixedCode: string;
   originalCode: string;
+  fileId?: string;
   language: Language;
   status: 'pending' | 'applied' | 'rejected';
 }
@@ -118,16 +158,22 @@ export interface ChatMessage {
   status?: 'pending' | 'streaming' | 'done' | 'error';
   fix?: FixProposal;
   tests?: { items: GeneratedTest[]; added: boolean };
+  /** Shown before the text, e.g. the result of re-running the tests. */
+  icon?: 'check' | 'cross' | 'warning';
   createdAt: number;
 }
 
 export interface ReviewState {
   code: string;
   language: Language;
+  /** The tab the change belongs to (the active tab when missing). */
+  fileId?: string;
   title: string;
   summary?: string;
   basedOn?: string;
   messageId?: string;
+  /** Re-run all tests after accepting (on by default). */
+  runTestsAfter?: boolean;
 }
 
 export interface ToolchainInfo {
@@ -138,6 +184,8 @@ export interface ToolchainInfo {
 export interface ServerConfig {
   aiEnabled: boolean;
   model: string;
+  /** API keys that can still use the main model right now; `activeModel` is null when every key is out of quota. */
+  aiKeys?: { total: number; available: number; activeModel: string | null };
   accessKeyRequired: boolean;
   toolchains: Record<Language, ToolchainInfo>;
   debuggers: Record<Language, boolean>;

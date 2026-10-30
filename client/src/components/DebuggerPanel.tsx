@@ -21,19 +21,20 @@ function WatchBar() {
   };
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line px-3 py-2">
-      <span className="mr-1 flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-subtle uppercase">
+    <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-1.5 border-b border-line py-2 pr-1.5 pl-3.5">
+      <span className="mr-1 flex items-center gap-1.5 text-[12px] font-medium text-muted">
         <Eye className="size-3.5" />
         Watch
       </span>
       {watches.map((name) => (
-        <span key={name} className="flex h-6 items-center gap-1 rounded-md border border-accent/30 bg-accent/10 pr-1 pl-2 font-mono text-xs text-accent">
+        <span key={name} className="flex h-6 items-center gap-1 rounded-md bg-hover pr-1 pl-2 font-mono text-xs text-fg ring-1 ring-line">
+
           {name}
           <button
             type="button"
             onClick={() => removeWatch(name)}
             aria-label={`Stop watching ${name}`}
-            className="rounded p-0.5 opacity-60 hover:bg-accent/20 hover:opacity-100"
+            className="rounded p-0.5 text-subtle hover:bg-panel hover:text-fg"
           >
             <X className="size-3" />
           </button>
@@ -45,7 +46,7 @@ function WatchBar() {
           onChange={(e) => setDraft(e.target.value)}
           placeholder={watches.length ? '+ variable' : 'variable name, e.g. sum'}
           spellCheck={false}
-          className="h-6 w-36 rounded-md border border-dashed border-line-strong bg-transparent px-2 font-mono text-xs placeholder:text-subtle focus:border-accent/60"
+          className="h-6 w-48 rounded-md border border-dashed border-line-strong bg-transparent px-2 font-mono text-xs placeholder:text-subtle focus:border-accent/60"
         />
       </form>
       <div className="flex-1" />
@@ -67,10 +68,10 @@ function WatchBar() {
   );
 }
 
-function Card({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
+function Pane({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
   return (
-    <section className="flex min-h-[150px] min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-panel-2/60">
-      <div className="flex min-h-8 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-1 text-[11px] font-semibold tracking-wider text-subtle uppercase">
+    <section className="flex min-h-[150px] min-w-0 flex-col overflow-hidden">
+      <div className="flex min-h-9 shrink-0 flex-wrap items-center justify-between gap-2 px-3.5 py-1 text-[12px] font-medium text-muted">
         {title}
         {actions}
       </div>
@@ -95,7 +96,7 @@ function Banner({ tone, children }: { tone: 'warning' | 'danger'; children: Reac
 
 function SessionView({ debug }: { debug: DebugSession }) {
   const stepIndex = useStore((s) => s.debugStep);
-  const stale = useStore((s) => s.code[debug.language] !== debug.code);
+  const stale = useStore((s) => s.files[debug.language].find((f) => f.id === debug.fileId)?.code !== debug.code);
   const steps = debug.steps;
   const step = steps[stepIndex];
   const changed = useMemo(() => changedAt(steps, stepIndex), [steps, stepIndex]);
@@ -173,8 +174,14 @@ function SessionView({ debug }: { debug: DebugSession }) {
           No lines of your code ran{debug.error ? ' before the error' : ''}. Check the input of Case {debug.testIndex + 1}.
         </div>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-auto p-3 @xl:grid-cols-2 @xl:overflow-hidden">
-          <Card title={<span>Variables · before line {step.line} runs</span>}>
+        <div className="grid min-h-0 flex-1 grid-cols-1 divide-y divide-line overflow-auto @xl:grid-cols-2 @xl:divide-x @xl:divide-y-0 @xl:overflow-hidden">
+          <Pane
+            title={
+              <span>
+                Variables <span className="text-subtle">· before line {step.line} runs</span>
+              </span>
+            }
+          >
             <div className="divide-y divide-line">
               {debug.watches.map((name) => {
                 const value = step.values[name];
@@ -197,9 +204,9 @@ function SessionView({ debug }: { debug: DebugSession }) {
                 );
               })}
             </div>
-          </Card>
+          </Pane>
 
-          <Card
+          <Pane
             title="History"
             actions={
               debug.watches.length > 1 && (
@@ -235,7 +242,7 @@ function SessionView({ debug }: { debug: DebugSession }) {
                 </span>
               </button>
             ))}
-          </Card>
+          </Pane>
         </div>
       )}
 
@@ -271,8 +278,8 @@ export function DebuggerPanel() {
   } else if (!debug || debug.language !== language) {
     body = (
       <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-        <div className="grid size-10 place-items-center rounded-2xl bg-accent/12 text-accent">
-          <Bug className="size-5" />
+        <div className="grid size-10 place-items-center rounded-xl bg-panel-2 text-muted ring-1 ring-line">
+          <Bug className="size-[18px]" />
         </div>
         <div className="max-w-md space-y-1.5 text-[13px] text-muted">
           <p className="font-medium text-fg">See how your variables change, line by line</p>

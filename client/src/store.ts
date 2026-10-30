@@ -1,14 +1,16 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { DEFAULT_CODE } from './lib/templates';
+import { DEFAULT_CODE, upgradeUntouchedTemplate } from './lib/templates';
 import type {
   BottomTab,
   ChatMessage,
+  CodeFile,
   CompileInfo,
   DebugSession,
   DialogName,
   Language,
   LastRun,
+  ProblemMeta,
   ReviewState,
   ServerConfig,
   Settings,
@@ -21,7 +23,17 @@ import type {
 /** Short random id. (crypto.randomUUID is unavailable on plain-http deployments.) */
 export const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
 
-const SAMPLE_TEST: TestCase = { id: 'sample', input: '2\n3\n1 5 2\n4\n7 7 3 9\n', expected: '5\n9\n' };
+const SAMPLE_TEST: TestCase = { id: 'sample', input: '', expected: '' };
+
+export const MAX_FILES = 12;
+
+const FIRST_FILE: Record<Language, string> = { cpp: 'main.cpp', java: 'Main.java', python: 'main.py' };
+
+const defaultFiles = (code: Record<Language, string> = DEFAULT_CODE): Record<Language, CodeFile[]> => ({
+  cpp: [{ id: 'cpp-main', name: FIRST_FILE.cpp, code: code.cpp }],
+  java: [{ id: 'java-main', name: FIRST_FILE.java, code: code.java }],
+  python: [{ id: 'python-main', name: FIRST_FILE.python, code: code.python }],
+});
 
 export const DEFAULT_SETTINGS: Settings = {
   fontSize: 14,
@@ -38,15 +50,25 @@ export const DEFAULT_SETTINGS: Settings = {
   floatTolerance: 0,
   ignoreCase: false,
   ioPosition: 'bottom',
+  ioFontSize: 13,
+  uiDarkness: 0,
+  uiContrast: 0,
+  layoutLocked: false,
 };
 
 interface PersistedState {
   language: Language;
-  code: Record<Language, string>;
+  /** Editor tabs, per language. */
+  files: Record<Language, CodeFile[]>;
+  activeFile: Record<Language, string>;
   tests: TestCase[];
   activeTestId: string;
   problem: string;
+  /** Set when the problem was imported from a judge. */
+  problemMeta: ProblemMeta | null;
   theme: Theme;
+  /** Last dark and light theme used, so Alt+T switches between them. */
+  themePair: { dark: Theme; light: Theme };
   settings: Settings;
   customTemplates: Template[];
   chat: ChatMessage[];
@@ -74,14 +96,18 @@ interface SessionState {
 
 interface Actions {
   setLanguage: (language: Language) => void;
-  setCode: (language: Language, code: string) => void;
+  /** Updates a file's code (the language's active tab when no id is given). */
+  setCode: (language: Language, code: string, fileId?: string) => void;
+  addFile: (language: Language, file: { name: string; code: string }) => string;
+  renameFile: (language: Language, id: string, name: string) => void;
+  closeFile: (language: Language, id: string) => void;
+  selectFile: (language: Language, id: string) => void;
   addTest: (test?: Partial<Omit<TestCase, 'id'>>, select?: boolean) => string;
   updateTest: (id: string, patch: Partial<Omit<TestCase, 'id'>>) => void;
   removeTest: (id: string) => void;
   duplicateTest: (id: string) => void;
   setActiveTest: (id: string) => void;
   setProblem: (problem: string) => void;
-  toggleTheme: () => void;
   updateSettings: (patch: Partial<Settings>) => void;
   addTemplate: (template: Omit<Template, 'id'>) => void;
   removeTemplate: (id: string) => void;
@@ -95,17 +121,23 @@ interface Actions {
 
 export type AppState = PersistedState & SessionState & Actions;
 
+export const activeFileOf = (s: Pick<AppState, 'files' | 'activeFile'>, language: Language): CodeFile =>
+  s.files[language].find((f) => f.id === s.activeFile[language]) ?? s.files[language][0];
+
 const prefersLight = typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: light)').matches;
 
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
       language: 'cpp',
-      code: { ...DEFAULT_CODE },
+      files: defaultFiles(),
+      activeFile: { cpp: 'cpp-main', java: 'java-main', python: 'python-main' },
       tests: [SAMPLE_TEST],
       activeTestId: SAMPLE_TEST.id,
       problem: '',
+      problemMeta: null,
       theme: prefersLight ? 'light' : 'dark',
+      themePair: { dark: 'dark', light: 'light' },
       settings: DEFAULT_SETTINGS,
       customTemplates: [],
       chat: [],
@@ -129,7 +161,33 @@ export const useStore = create<AppState>()(
       aiBusy: false,
 
       setLanguage: (language) => set({ language, selection: null }),
-      setCode: (language, code) => set((s) => (s.code[language] === code ? s : { code: { ...s.code, [language]: code } })),
+      setCode: (language, code, fileId) =>
+        set((s) => {
+          const id = fileId ?? s.activeFile[language];
+          const file = s.files[language].find((f) => f.id === id);
+          if (!file || file.code === code) return s;
+          return { files: { ...s.files, [language]: s.files[language].map((f) => (f.id === id ? { ...f, code } : f)) } };
+        }),
+      addFile: (language, file) => {
+        const id = uid();
+        set((s) => ({
+          files: { ...s.files, [language]: [...s.files[language], { id, ...file }] },
+          activeFile: { ...s.activeFile, [language]: id },
+        }));
+        return id;
+      },
+      renameFile: (language, id, name) =>
+        set((s) => ({ files: { ...s.files, [language]: s.files[language].map((f) => (f.id === id ? { ...f, name } : f)) } })),
+      closeFile: (language, id) =>
+        set((s) => {
+          const list = s.files[language];
+          if (list.length <= 1) return s;
+          const index = list.findIndex((f) => f.id === id);
+          const files = list.filter((f) => f.id !== id);
+          const activeId = s.activeFile[language] === id ? files[Math.min(index, files.length - 1)].id : s.activeFile[language];
+          return { files: { ...s.files, [language]: files }, activeFile: { ...s.activeFile, [language]: activeId } };
+        }),
+      selectFile: (language, id) => set((s) => ({ activeFile: { ...s.activeFile, [language]: id }, selection: null })),
 
       addTest: (test, select = true) => {
         const id = uid();
@@ -156,7 +214,6 @@ export const useStore = create<AppState>()(
       },
       setActiveTest: (activeTestId) => set({ activeTestId, bottomTab: 'tests' }),
       setProblem: (problem) => set({ problem }),
-      toggleTheme: () => set((s) => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
       updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
 
       addTemplate: (template) => set((s) => ({ customTemplates: [...s.customTemplates, { ...template, id: uid() }] })),
@@ -181,11 +238,14 @@ export const useStore = create<AppState>()(
       version: 1,
       partialize: (s): PersistedState => ({
         language: s.language,
-        code: s.code,
+        files: s.files,
+        activeFile: s.activeFile,
         tests: s.tests,
         activeTestId: s.activeTestId,
         problem: s.problem,
+        problemMeta: s.problemMeta,
         theme: s.theme,
+        themePair: s.themePair,
         settings: s.settings,
         customTemplates: s.customTemplates,
         // A reply that was still streaming when the page closed can't be resumed.
@@ -196,12 +256,23 @@ export const useStore = create<AppState>()(
         watches: s.watches,
       }),
       merge: (persisted, current) => {
-        const saved = (persisted ?? {}) as Partial<PersistedState>;
+        const saved = (persisted ?? {}) as Partial<PersistedState> & { code?: Record<Language, string> };
+        // Before tabs existed, each language had a single `code` string.
+        const loaded = saved.files ?? (saved.code ? defaultFiles({ ...DEFAULT_CODE, ...saved.code }) : current.files);
+        const files = Object.fromEntries(
+          Object.entries(loaded).map(([language, list]) => [
+            language,
+            list.map((f) => ({ ...f, code: upgradeUntouchedTemplate(language as Language, f.code) })),
+          ]),
+        ) as Record<Language, CodeFile[]>;
+        const { code: _legacy, ...rest } = saved;
         return {
           ...current,
-          ...saved,
-          code: { ...current.code, ...saved.code },
+          ...rest,
+          files: { ...current.files, ...files },
+          activeFile: { ...current.activeFile, ...saved.activeFile },
           settings: { ...current.settings, ...saved.settings },
+          themePair: { ...current.themePair, ...saved.themePair },
           watches: { ...current.watches, ...saved.watches },
           tests: saved.tests?.length ? saved.tests : current.tests,
         };

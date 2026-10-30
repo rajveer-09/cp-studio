@@ -1,4 +1,4 @@
-import type { CompileInfo, DebugStep, GeneratedTest, Language, ServerConfig } from '../types';
+import type { CompileInfo, DebugStep, GeneratedTest, ImportedProblem, Language, Platform, ServerConfig } from '../types';
 
 const ACCESS_KEY_STORAGE = 'cp-studio-access-key';
 
@@ -132,7 +132,17 @@ export const api = {
 
   fix: (body: { context: AiContext; instruction: string }, signal: AbortSignal) => post<FixResponse>('/ai/fix', body, signal),
 
-  tests: (body: { context: AiContext }, signal: AbortSignal) => post<{ tests: GeneratedTest[] }>('/ai/tests', body, signal),
+  tests: (
+    body: { context: AiContext; count?: number; focus?: 'edge' | 'random' | 'mixed'; withExpected?: boolean },
+    signal: AbortSignal,
+  ) => post<{ tests: GeneratedTest[] }>('/ai/tests', body, signal),
+
+  driver: (body: { language: Language; snippet: string; examples: { input: string; expected: string }[] }) =>
+    post<{ code: string }>('/ai/driver', body),
+
+  importProblem: (body: { platform: Platform; ref: string }) => post<ImportedProblem>('/problems/import', body),
+
+  problemFromPage: (page: unknown) => post<ImportedProblem>('/problems/from-page', page),
 
   /** Streams a chat reply (Server-Sent Events over a POST request). */
   async chat(

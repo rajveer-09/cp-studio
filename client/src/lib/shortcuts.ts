@@ -10,6 +10,7 @@ export const SHORTCUTS: ShortcutGroup[] = [
       { keys: ['Mod', 'Enter'], label: 'Run the selected test case' },
       { keys: ['Mod', 'Shift', 'Enter'], label: 'Run all test cases' },
       { keys: ['Alt', 'N'], label: 'Add a test case' },
+      { keys: ['Alt', 'G'], label: 'Generate test cases with AI' },
     ],
   },
   {
@@ -46,9 +47,10 @@ export const SHORTCUTS: ShortcutGroup[] = [
   {
     group: 'General',
     items: [
-      { keys: ['Alt', 'T'], label: 'Toggle dark / light mode' },
+      { keys: ['Alt', 'T'], label: 'Switch between your dark and light theme' },
       { keys: ['Alt', 'L'], label: 'Move test panel right / bottom' },
       { keys: ['Alt', 'B'], label: 'Show / hide the assistant panel' },
+      { keys: ['Alt', 'K'], label: 'Lock / unlock the layout' },
       { keys: ['Alt', '/'], label: 'Show keyboard shortcuts' },
     ],
   },

@@ -10,12 +10,21 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { registerCompletions } from './lib/completions';
 import { registerFormatters } from './lib/format';
+import { consumeImportHash } from './lib/problems';
 
 registerFormatters();
 registerCompletions();
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+void consumeImportHash().then((handedOff) => {
+  if (handedOff) {
+    window.close();
+    document.body.innerHTML =
+      '<p style="display:grid;place-items:center;height:100%;margin:0;font:14px Inter,sans-serif">Sent to your CP Studio tab. You can close this tab.</p>';
+    return;
+  }
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+});

@@ -1,22 +1,27 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { AlignLeft, Loader2, RotateCcw } from 'lucide-react';
+import { AlignLeft, Download, FileArchive, FileDown, Loader2, RotateCcw } from 'lucide-react';
+import { DropdownMenu } from 'radix-ui';
 import { useEffect } from 'react';
 import { isWatchable } from '../lib/completions';
 import { debugVariable } from '../lib/debugger';
-import { editorBridge } from '../lib/editor';
+import { downloadActiveFile, downloadZip } from '../lib/download';
+import { editorBridge, modelPath } from '../lib/editor';
 import { LANGUAGE_META } from '../lib/languages';
-import { useStore } from '../store';
+import { monacoThemeName } from '../lib/themes';
+import { activeFileOf, useStore } from '../store';
+import { FileTabs } from './FileTabs';
 import { Button, Tip } from './ui';
 
 const clip = (text: string) => (text.length > 40 ? `${text.slice(0, 40)}…` : text);
 
 function useDebugHighlight() {
   const language = useStore((s) => s.language);
+  const fileId = useStore((s) => s.activeFile[s.language]);
   const debug = useStore((s) => s.debug);
   const stepIndex = useStore((s) => s.debugStep);
 
   useEffect(() => {
-    if (debug?.status !== 'done' || debug.language !== language || !debug.steps.length) {
+    if (debug?.status !== 'done' || debug.language !== language || debug.fileId !== fileId || !debug.steps.length) {
       editorBridge.showDebugStep(language, null);
       return;
     }
@@ -26,7 +31,48 @@ function useDebugHighlight() {
       .map(([name, value]) => `${name} = ${clip(value)}`)
       .join('   ');
     editorBridge.showDebugStep(language, { line: crashedHere && debug.errorLine ? debug.errorLine : step.line, text, error: crashedHere });
-  }, [debug, stepIndex, language]);
+  }, [debug, stepIndex, language, fileId]);
+}
+
+const menuItem = 'flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] outline-none data-[highlighted]:bg-hover [&_svg]:size-3.5 [&_svg]:text-muted';
+
+function DownloadMenu() {
+  const language = useStore((s) => s.language);
+  const tabCount = useStore((s) => s.files[s.language].length);
+  const name = useStore((s) => activeFileOf(s, s.language).name);
+  const label = LANGUAGE_META[language].label;
+
+  return (
+    <DropdownMenu.Root>
+      <Tip label="Download code">
+        <DropdownMenu.Trigger asChild>
+          <Button size="sm" variant="ghost" aria-label="Download code">
+            <Download />
+          </Button>
+        </DropdownMenu.Trigger>
+      </Tip>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content align="end" sideOffset={6} className="popover z-50 w-60 rounded-xl border border-line bg-panel p-1.5 shadow-pop">
+          <DropdownMenu.Item onSelect={downloadActiveFile} className={menuItem}>
+            <FileDown />
+            <span className="truncate">
+              Download <span className="font-mono text-[12px]">{name}</span>
+            </span>
+          </DropdownMenu.Item>
+          {tabCount > 1 && (
+            <DropdownMenu.Item onSelect={() => downloadZip(language)} className={menuItem}>
+              <FileArchive />
+              All {tabCount} {label} tabs (.zip)
+            </DropdownMenu.Item>
+          )}
+          <DropdownMenu.Item onSelect={() => downloadZip()} className={menuItem}>
+            <FileArchive />
+            All tabs, every language (.zip)
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
 }
 
 export function CodeEditor() {
@@ -34,6 +80,8 @@ export function CodeEditor() {
   const theme = useStore((s) => s.theme);
   const settings = useStore((s) => s.settings);
   const setCode = useStore((s) => s.setCode);
+  useStore((s) => s.activeFile[s.language]); // re-render when the active tab changes
+  const file = activeFileOf(useStore.getState(), language);
   const meta = LANGUAGE_META[language];
   useDebugHighlight();
 
@@ -57,13 +105,9 @@ export function CodeEditor() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line pr-1.5 pl-3 text-[13px]">
-        <span className="size-2 rounded-full" style={{ background: meta.color }} />
-        <span className="font-medium">{meta.file}</span>
-        {language === 'cpp' && (
-          <span className="rounded bg-panel-2 px-1.5 py-px text-[11px] font-medium text-muted">{settings.cppStandard.toUpperCase()}</span>
-        )}
-        <div className="flex-1" />
+      <div className="flex h-10 shrink-0 items-stretch border-b border-line bg-panel-2/40">
+        <FileTabs />
+        <div className="flex shrink-0 items-center gap-0.5 pr-1.5 pl-2">
         <Tip label="Format code" keys={['Shift', 'Alt', 'F']}>
           <Button size="sm" variant="ghost" onClick={() => editorBridge.runAction('editor.action.formatDocument')}>
             <AlignLeft />
@@ -76,16 +120,18 @@ export function CodeEditor() {
             <span className="hidden md:inline">Reset</span>
           </Button>
         </Tip>
+        <DownloadMenu />
+        </div>
       </div>
       <div className="min-h-0 flex-1">
-        {/* One model per language (keyed by `path`), so each keeps its own undo history and cursor. */}
+        {/* One model per tab (keyed by `path`), so each keeps its own undo history and cursor. */}
         <Editor
-          path={meta.file}
+          path={modelPath(language, file.id)}
           language={meta.monaco}
-          defaultValue={useStore.getState().code[language]}
+          defaultValue={file.code}
           keepCurrentModel
-          theme={theme === 'dark' ? 'cp-dark' : 'cp-light'}
-          onChange={(value) => setCode(language, value ?? '')}
+          theme={monacoThemeName(theme)}
+          onChange={(value) => setCode(language, value ?? '', file.id)}
           onMount={handleMount}
           loading={<Loader2 className="size-5 animate-spin text-subtle" />}
           options={{

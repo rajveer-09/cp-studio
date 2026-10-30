@@ -4,8 +4,8 @@ export const LANGUAGES: Language[] = ['cpp', 'java', 'python'];
 
 export const LANGUAGE_META: Record<Language, { label: string; monaco: string; file: string; color: string; fences: string[] }> = {
   cpp: { label: 'C++', monaco: 'cpp', file: 'main.cpp', color: '#5b9bd5', fences: ['cpp', 'c++', 'cc', 'cxx', 'c', 'h', 'hpp'] },
-  java: { label: 'Java', monaco: 'java', file: 'Main.java', color: '#f0932b', fences: ['java'] },
-  python: { label: 'Python', monaco: 'python', file: 'main.py', color: '#e8c33a', fences: ['python', 'py', 'python3'] },
+  java: { label: 'Java', monaco: 'java', file: 'Main.java', color: '#e0679a', fences: ['java'] },
+  python: { label: 'Python', monaco: 'python', file: 'main.py', color: '#2fb9a6', fences: ['python', 'py', 'python3'] },
 };
 
 export function languageFromFence(tag: string | undefined): Language | null {
