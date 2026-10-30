@@ -8,9 +8,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
+import { keyStatus, MODELS } from './ai/keys.js';
 import { aiEnabled, config } from './config.js';
 import { aiRouter } from './routes/ai.js';
 import { debugRouter } from './routes/debug.js';
+import { problemsRouter } from './routes/problems.js';
 import { runRouter } from './routes/run.js';
 import { initRunner } from './runner/index.js';
 import { getToolchains } from './runner/toolchains.js';
@@ -38,11 +40,18 @@ const limiter = (perMinute: number, what: string) =>
     message: { error: `Too many ${what} requests. Please wait a minute.` },
   });
 
+// For uptime monitors (which also keep a sleeping free instance awake): cheap, and needs no access key.
+app.get('/api/health', (_req, res) => {
+  res.set('Cache-Control', 'no-store').json({ ok: true, uptimeSeconds: Math.round(process.uptime()) });
+});
+
 app.get('/api/config', async (_req, res) => {
   const { languages, gdb } = await getToolchains();
+  const aiKeys = keyStatus();
   res.json({
     aiEnabled,
-    model: config.gemini.model,
+    aiKeys,
+    model: aiKeys.activeModel ?? config.gemini.model,
     accessKeyRequired: Boolean(config.accessKey),
     toolchains: languages,
     debuggers: { cpp: languages.cpp.available && gdb.available, java: languages.java.available, python: languages.python.available },
@@ -54,6 +63,7 @@ app.use('/api', requireAccessKey);
 app.post('/api/auth/check', (_req, res) => res.json({ ok: true }));
 app.use('/api/run', limiter(90, 'run'), runRouter);
 app.use('/api/debug', limiter(30, 'debug'), debugRouter);
+app.use('/api/problems', limiter(30, 'import'), problemsRouter);
 app.use('/api/ai', limiter(30, 'AI'), aiRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
 
@@ -74,7 +84,9 @@ app.use(errorHandler);
 await initRunner();
 app.listen(config.port, async () => {
   console.log(`CP Studio server listening on http://localhost:${config.port}`);
-  console.log(`AI assistant: ${aiEnabled ? `enabled (${config.gemini.model})` : 'disabled (set GEMINI_API_KEY)'}`);
+  console.log(
+    `AI assistant: ${aiEnabled ? `enabled (${MODELS[0]}${MODELS.length > 1 ? `, falls back to ${MODELS.slice(1).join(', ')}` : ''}; ${config.gemini.apiKeys.length} API key${config.gemini.apiKeys.length === 1 ? '' : 's'})` : 'disabled (set GEMINI_API_KEYS)'}`,
+  );
   const { languages, gdb } = await getToolchains();
   for (const [name, info] of [...Object.entries(languages), ['gdb', gdb] as const]) {
     console.log(`  ${name.padEnd(7)} ${info.available ? info.version : 'NOT FOUND'}`);

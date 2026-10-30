@@ -114,7 +114,13 @@ export function getWorkspace(language: Language, code: string, cppStandard: CppS
   return workspace;
 }
 
-function toTestResult(id: string, result: ProcessResult, ws: Workspace, language: Language): TestRunResult {
+/**
+ * On a CPU quota (e.g. 0.1 core) a program gets only a slice of each second, so its real running time is
+ * many times its CPU time. The hard stop allows for that; the verdict uses the measured CPU time.
+ */
+const SLOWDOWN = config.cpuLimit !== null && config.cpuLimit < 1 ? Math.min(10, 1 / config.cpuLimit) : 1;
+
+function toTestResult(id: string, result: ProcessResult, ws: Workspace, language: Language, timeLimitMs: number): TestRunResult {
   const base = {
     id,
     stdout: result.stdout,
@@ -123,7 +129,7 @@ function toTestResult(id: string, result: ProcessResult, ws: Workspace, language
     timeMs: result.timeMs,
   };
   if (result.spawnError) return { ...base, status: 'internal_error', message: MISSING_TOOLCHAIN[language] };
-  if (result.timedOut) return { ...base, status: 'time_limit' };
+  if (result.timedOut || (result.cpuMeasured && result.timeMs > timeLimitMs)) return { ...base, status: 'time_limit' };
   if (result.outputLimitExceeded) return { ...base, status: 'output_limit', message: 'Output exceeded 1 MB' };
   if (result.exitCode !== 0 || result.signal) {
     return { ...base, status: 'runtime_error', message: describeExit(result.exitCode, result.signal) };
@@ -142,10 +148,11 @@ export async function execute(request: RunRequest): Promise<{ compile: CompileRe
       runProcess(ws.plan.run.cmd, ws.plan.run.args, {
         cwd: ws.dir,
         input: test.input,
-        timeoutMs: request.timeLimitMs,
+        timeoutMs: Math.round(request.timeLimitMs * SLOWDOWN) + (SLOWDOWN > 1 ? 1000 : 0),
+        cpuTime: true,
       }),
     );
-    results.push(toTestResult(test.id, result, ws, request.language));
+    results.push(toTestResult(test.id, result, ws, request.language, request.timeLimitMs));
   }
   return { compile: ws.compile, results };
 }

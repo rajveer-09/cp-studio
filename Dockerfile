@@ -13,8 +13,11 @@ FROM node:22-bookworm-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends g++ gdb openjdk-17-jdk-headless python3 \
     && rm -rf /var/lib/apt/lists/*
+# Precompiled <bits/stdc++.h> for the default build (C++17, -O2): most of a C++ compile is parsing that header.
+RUN mkdir -p /opt/cp-pch/bits \
+    && g++ -std=c++17 -O2 -x c++-header "$(find /usr/include -path '*/bits/stdc++.h' | head -n 1)" -o /opt/cp-pch/bits/stdc++.h.gch
 WORKDIR /app
-ENV NODE_ENV=production PORT=3001 TRUST_PROXY=1
+ENV NODE_ENV=production PORT=3001 TRUST_PROXY=1 CXX_PCH_DIR=/opt/cp-pch
 COPY package.json package-lock.json ./
 COPY client/package.json client/
 COPY server/package.json server/

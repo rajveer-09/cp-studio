@@ -13,7 +13,8 @@ export interface Toolchains {
   gdb: ToolchainInfo;
 }
 
-const CACHE_MS = 60_000;
+// Installed toolchains don't change while the server runs; probing them (a JVM for javac) is costly on a small CPU.
+const CACHE_MS = 60 * 60_000;
 let cache: { at: number; value: Promise<Toolchains> } | null = null;
 
 async function probe(cmd: string, args: string[]): Promise<ToolchainInfo> {

@@ -60,7 +60,11 @@ export function planBuild(language: Language, code: string, dir: string, cppStan
     case 'cpp': {
       const exe = cppExecutable;
       const optimisation = mode === 'debug' ? ['-g', '-O0', '-include', 'cp_debug_prelude.h'] : ['-O2'];
-      const compileArgs = [`-std=${cppStandard}`, ...optimisation, '-pipe', '-Wall', 'main.cpp', '-o', exe];
+      // -Wno-unknown-pragmas: older g++ warns about the "#pragma region" lines editors use for folding.
+      const compileArgs = [`-std=${cppStandard}`, ...optimisation, '-pipe', '-Wall', '-Wno-unknown-pragmas', 'main.cpp', '-o', exe];
+      // A precompiled <bits/stdc++.h> (Docker image) skips re-parsing the whole standard library each time.
+      // g++ uses it only when the flags match the ones it was built with, otherwise it reads the header.
+      if (toolchain.cxxPchDir && mode === 'run') compileArgs.unshift('-I', toolchain.cxxPchDir);
       // Deep recursion is common in CP: raise the stack limit (256 MB on Windows, unlimited elsewhere).
       if (isWindows) compileArgs.push('-Wl,--stack,268435456');
       return {
@@ -76,7 +80,11 @@ export function planBuild(language: Language, code: string, dir: string, cppStan
       const className = javaClassName(code);
       return {
         sourceFile: `${className}.java`,
-        compile: { cmd: toolchain.javac, args: ['-encoding', 'UTF-8', ...(mode === 'debug' ? ['-g'] : []), `${className}.java`] },
+        compile: {
+          cmd: toolchain.javac,
+          // javac is a short-lived JVM: the quick-start JIT and the serial GC make it start noticeably faster.
+          args: ['-J-XX:TieredStopAtLevel=1', '-J-XX:+UseSerialGC', '-encoding', 'UTF-8', ...(mode === 'debug' ? ['-g'] : []), `${className}.java`],
+        },
         run: { cmd: toolchain.java, args: ['-Xss256m', '-Xmx512m', '-XX:+UseSerialGC', '-cp', '.', className] },
       };
     }

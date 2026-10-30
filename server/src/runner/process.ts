@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import os from 'node:os';
 import { config } from '../config.js';
 
 export interface ProcessResult {
@@ -6,7 +7,9 @@ export interface ProcessResult {
   stderr: string;
   exitCode: number | null;
   signal: NodeJS.Signals | null;
+  /** CPU time when it was measured (cpuTime option, Linux), otherwise wall-clock time. */
   timeMs: number;
+  cpuMeasured: boolean;
   timedOut: boolean;
   outputLimitExceeded: boolean;
   spawnError?: string;
@@ -17,7 +20,25 @@ export interface ProcessOptions {
   input?: string;
   timeoutMs: number;
   maxOutputBytes?: number;
+  /** Report the program's CPU time instead of wall-clock time (Linux only). */
+  cpuTime?: boolean;
 }
+
+/**
+ * Runs the command under sh and writes the children's CPU time (the `times` builtin) to fd 3, so a program
+ * on a throttled CPU (a 0.1-core cloud instance) is judged on the work it did, not on how long it waited.
+ */
+const CPU_WRAPPER = '"$@"; status=$?; times >&3; exit $status';
+
+/** "0m0.523s 0m0.020s" (the children's line of `times`) → 543 ms. */
+function parseTimes(text: string): number | null {
+  const children = text.trim().split('\n')[1];
+  const parts = [...(children ?? '').matchAll(/(\d+)m([\d.]+)s/g)];
+  if (parts.length < 2) return null;
+  return Math.round(parts.reduce((ms, [, m, s]) => ms + Number(m) * 60_000 + Number(s) * 1000, 0));
+}
+
+const SIGNAL_NAMES = Object.fromEntries(Object.entries(os.constants.signals).map(([name, n]) => [n, name])) as Record<number, NodeJS.Signals>;
 
 // User programs only get the variables they need to run. In particular the
 // server's secrets (GEMINI_API_KEY, ACCESS_KEY…) are never passed down.
@@ -58,14 +79,24 @@ export function runProcess(cmd: string, args: string[], options: ProcessOptions)
     let timedOut = false;
     let outputLimitExceeded = false;
     let settled = false;
+    const measureCpu = Boolean(options.cpuTime) && !config.isWindows;
+    let timesReport = '';
 
-    const child = spawn(cmd, args, {
-      cwd: options.cwd,
-      env: childEnv,
-      windowsHide: true,
-      detached: !config.isWindows,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    const child = measureCpu
+      ? spawn('sh', ['-c', CPU_WRAPPER, 'cp-run', cmd, ...args], {
+          cwd: options.cwd,
+          env: childEnv,
+          detached: true,
+          stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+        })
+      : spawn(cmd, args, {
+          cwd: options.cwd,
+          env: childEnv,
+          windowsHide: true,
+          detached: !config.isWindows,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+    if (measureCpu) (child.stdio[3] as NodeJS.ReadableStream).on('data', (chunk: Buffer) => (timesReport += chunk.toString()));
 
     const timer = setTimeout(() => {
       timedOut = true;
@@ -76,12 +107,21 @@ export function runProcess(cmd: string, args: string[], options: ProcessOptions)
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      const wallMs = Math.round(performance.now() - startedAt);
+      const measured = measureCpu ? parseTimes(timesReport) : null;
+      // Zero CPU over a long run means the measurement didn't work here: fall back to wall-clock time.
+      const cpuMs = measured === 0 && wallMs > 1000 ? null : measured;
+      // Through the wrapper a signal shows up as exit status 128 + n; report it as the signal again.
+      if (measureCpu && partial.exitCode && partial.exitCode > 128 && SIGNAL_NAMES[partial.exitCode - 128]) {
+        partial = { ...partial, exitCode: null, signal: SIGNAL_NAMES[partial.exitCode - 128] };
+      }
       resolve({
         stdout: Buffer.concat(stdout).toString('utf8'),
         stderr: Buffer.concat(stderr).toString('utf8'),
         exitCode: null,
         signal: null,
-        timeMs: Math.round(performance.now() - startedAt),
+        timeMs: cpuMs ?? wallMs,
+        cpuMeasured: cpuMs !== null,
         timedOut,
         outputLimitExceeded,
         ...partial,
