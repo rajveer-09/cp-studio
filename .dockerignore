@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+.git
+*.log
+# Never bake secrets into the image: pass them as environment variables instead.
+**/.env
+**/.env.*
+!**/.env.example
