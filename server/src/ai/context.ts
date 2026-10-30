@@ -20,15 +20,23 @@ export interface CodeContext {
   }[];
 }
 
+/** full: everything the AI needs to debug. code: no test data, for explaining or analysing the code itself. */
+export type ContextScope = 'full' | 'code';
+
 const MAX_TESTS = 6;
+const MAX_DETAILED_TESTS = 3;
 
 function str(value: unknown, max: number): string {
   if (typeof value !== 'string') return '';
   return value.length > max ? `${value.slice(0, max)}\n… [truncated ${value.length - max} characters]` : value;
 }
 
-function optionalStr(value: unknown, max: number): string | undefined {
-  return typeof value === 'string' ? str(value, max) : undefined;
+/** Keeps the start and the end (where outputs usually differ), dropping the middle of long text. */
+function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const head = Math.floor(max * 0.6);
+  const tail = max - head;
+  return `${text.slice(0, head)}\n… [${text.length - max} characters omitted] …\n${text.slice(-tail)}`;
 }
 
 export function parseContext(raw: unknown): CodeContext | null {
@@ -39,26 +47,27 @@ export function parseContext(raw: unknown): CodeContext | null {
   const selection = ctx.selection as Record<string, unknown> | null | undefined;
   const compile = ctx.compile as Record<string, unknown> | null | undefined;
   const tests = Array.isArray(ctx.tests) ? ctx.tests.slice(0, MAX_TESTS) : [];
+  const text = (value: unknown, max: number) => (typeof value === 'string' ? clip(value, max) : '');
 
   return {
     language: ctx.language,
     cppStandard: str(ctx.cppStandard, 20) || 'c++17',
     code: str(ctx.code, 60_000),
-    problem: str(ctx.problem, 12_000),
+    problem: str(ctx.problem, 8_000),
     selection:
       selection && typeof selection.text === 'string' && selection.text.trim()
         ? { startLine: Number(selection.startLine) || 1, endLine: Number(selection.endLine) || 1, text: str(selection.text, 8_000) }
         : null,
-    compile: compile ? { ok: Boolean(compile.ok), output: str(compile.output, 6_000) } : null,
+    compile: compile ? { ok: Boolean(compile.ok), output: text(compile.output, 4_000) } : null,
     resultsStale: Boolean(ctx.resultsStale),
     tests: tests.map((t: Record<string, unknown>, i) => ({
       index: Number(t.index) || i + 1,
       active: Boolean(t.active),
-      input: str(t.input, 3_000),
-      expected: str(t.expected, 3_000),
-      output: optionalStr(t.output, 3_000),
-      stderr: optionalStr(t.stderr, 3_000),
-      verdict: optionalStr(t.verdict, 60),
+      input: text(t.input, 1_500),
+      expected: text(t.expected, 1_200),
+      output: typeof t.output === 'string' ? clip(t.output, 1_200) : undefined,
+      stderr: typeof t.stderr === 'string' ? clip(t.stderr, 1_500) : undefined,
+      verdict: typeof t.verdict === 'string' ? t.verdict.slice(0, 60) : undefined,
       timeMs: typeof t.timeMs === 'number' ? t.timeMs : undefined,
     })),
   };
@@ -80,7 +89,34 @@ function withLineNumbers(code: string): string {
   return lines.map((line, i) => `${String(i + 1).padStart(width)} | ${line}`).join('\n');
 }
 
-export function formatContext(ctx: CodeContext): string {
+const passed = (verdict?: string) => verdict === 'Accepted' || verdict === 'Finished';
+
+function formatTests(ctx: CodeContext, scope: ContextScope): string {
+  if (!ctx.tests.length) return '## Test cases\n(none yet)';
+
+  const summary = ctx.tests.map((t) => `Test ${t.index}: ${t.verdict ?? 'not run'}`).join(', ');
+  if (scope === 'code') return `## Test results\n${summary}`;
+
+  // Passing tests say little; spend the tokens on the failing ones (and the one the user is looking at).
+  const detailed = new Set(
+    ctx.tests
+      .filter((t) => t.active || !passed(t.verdict))
+      .slice(0, MAX_DETAILED_TESTS)
+      .map((t) => t.index),
+  );
+  const tests = ctx.tests.map((t) => {
+    const header = `### Test ${t.index}${t.active ? ' (currently selected)' : ''}${t.verdict ? ` — ${t.verdict}${t.timeMs !== undefined ? `, ${t.timeMs} ms` : ''}` : ''}`;
+    if (!detailed.has(t.index)) return header;
+    const parts = [header, `Input:\n${block(t.input)}`];
+    parts.push(t.expected.trim() ? `Expected output:\n${block(t.expected)}` : 'Expected output: (not provided)');
+    if (t.output !== undefined) parts.push(`Actual output:\n${block(t.output || '(empty)')}`);
+    if (t.stderr?.trim()) parts.push(`Stderr / runtime error:\n${block(t.stderr)}`);
+    return parts.join('\n');
+  });
+  return `## Test cases\n${tests.join('\n\n')}`;
+}
+
+export function formatContext(ctx: CodeContext, scope: ContextScope = 'full'): string {
   const { label, fence } = LANGUAGE_INFO[ctx.language];
   const sections: string[] = [];
 
@@ -100,24 +136,10 @@ export function formatContext(ctx: CodeContext): string {
 
   if (ctx.compile && !ctx.compile.ok) {
     sections.push(`## Last compilation FAILED\n${block(ctx.compile.output)}`);
-  } else if (ctx.compile?.output.trim()) {
+  } else if (ctx.compile?.output.trim() && scope === 'full') {
     sections.push(`## Compiler warnings\n${block(ctx.compile.output)}`);
   }
 
-  if (ctx.tests.length) {
-    const tests = ctx.tests.map((t) => {
-      const header = [`### Test ${t.index}${t.active ? ' (currently selected)' : ''}`];
-      if (t.verdict) header.push(`verdict: ${t.verdict}${t.timeMs !== undefined ? `, ${t.timeMs} ms` : ''}`);
-      const parts = [header.join(' — '), `Input:\n${block(t.input)}`];
-      parts.push(t.expected.trim() ? `Expected output:\n${block(t.expected)}` : 'Expected output: (not provided)');
-      if (t.output !== undefined) parts.push(`Actual output:\n${block(t.output || '(empty)')}`);
-      if (t.stderr?.trim()) parts.push(`Stderr / runtime error:\n${block(t.stderr)}`);
-      return parts.join('\n');
-    });
-    sections.push(`## Test cases\n${tests.join('\n\n')}`);
-  } else {
-    sections.push('## Test cases\n(none yet)');
-  }
-
+  sections.push(formatTests(ctx, scope));
   return `# Workspace context\n\n${sections.join('\n\n')}`;
 }

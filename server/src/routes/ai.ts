@@ -1,14 +1,15 @@
 import { Router, type Request, type Response } from 'express';
 import { aiEnabled } from '../config.js';
 import { parseContext } from '../ai/context.js';
-import { describeAiError, generateTests, proposeFix, streamChat, type ChatTurn } from '../ai/gemini.js';
-import { CHAT_COMMANDS, type ChatCommand } from '../ai/prompts.js';
+import { describeAiError, generateDriver, generateTests, proposeFix, streamChat, type ChatTurn } from '../ai/gemini.js';
+import { CHAT_COMMANDS, TEST_FOCUSES, type ChatCommand, type TestFocus } from '../ai/prompts.js';
+import { isLanguage } from '../runner/languages.js';
 
 export const aiRouter = Router();
 
 aiRouter.use((_req, res, next) => {
   if (!aiEnabled) {
-    res.status(503).json({ error: 'The AI assistant is not configured. Set GEMINI_API_KEY in server/.env and restart the server.' });
+    res.status(503).json({ error: 'The AI assistant is not configured. Set GEMINI_API_KEYS in server/.env and restart the server.' });
     return;
   }
   next();
@@ -82,9 +83,33 @@ aiRouter.post('/tests', async (req, res) => {
   const context = parseContext(req.body?.context);
   if (!context) return res.status(400).json({ error: 'Missing or invalid code context.' });
 
+  const count = Math.min(10, Math.max(1, Number(req.body?.count) || 4));
+  const focus: TestFocus = TEST_FOCUSES.includes(req.body?.focus) ? req.body.focus : 'mixed';
+  const withExpected = req.body?.withExpected !== false;
+
   const { cancelled, signal } = abortOnDisconnect(res);
   try {
-    res.json({ tests: await generateTests(context, signal) });
+    res.json({ tests: await generateTests(context, { count, focus, withExpected }, signal) });
+  } catch (err) {
+    const { status, message } = describeAiError(err);
+    if (!cancelled.aborted) res.status(status).json({ error: message });
+  }
+});
+
+aiRouter.post('/driver', async (req, res) => {
+  const { language, snippet, examples } = req.body ?? {};
+  if (!isLanguage(language) || typeof snippet !== 'string' || !snippet.trim() || snippet.length > 20_000) {
+    return res.status(400).json({ error: 'Missing starter code.' });
+  }
+  const parsedExamples = Array.isArray(examples)
+    ? examples
+        .filter((e) => typeof e?.input === 'string')
+        .map((e) => ({ input: String(e.input).slice(0, 3_000), expected: String(e.expected ?? '').slice(0, 3_000) }))
+    : [];
+
+  const { cancelled, signal } = abortOnDisconnect(res);
+  try {
+    res.json({ code: await generateDriver(language, snippet, parsedExamples, signal) });
   } catch (err) {
     const { status, message } = describeAiError(err);
     if (!cancelled.aborted) res.status(status).json({ error: message });
