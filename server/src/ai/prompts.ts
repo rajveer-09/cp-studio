@@ -15,7 +15,7 @@ Guidelines:
 - Use fenced code blocks with a language tag (\`\`\`cpp, \`\`\`java, \`\`\`python). When you give a full corrected program, give the complete file so it can be applied directly.
 - Programs read from stdin and write to stdout. In Java, keep the public class name unchanged.
 - The line numbers in the context are not part of the source: never include them in code you write.
-- Write complexities and math as plain text or inline code, e.g. \`O(n log n)\`, \`10^5\`. Never use LaTeX or $…$ notation.
+- Write math and complexities as LaTeX between single dollar signs, like the problem statement: $O(n \\log n)$, $1 \\le n \\le 10^5$. It is typeset in the chat. Never put math in inline code or code blocks.
 - Never use emoji.
 - You cannot run code. Never claim you ran or tested anything.`;
 

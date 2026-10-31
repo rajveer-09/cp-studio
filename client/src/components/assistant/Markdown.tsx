@@ -1,6 +1,6 @@
 import { Check, Copy, GitCompare } from 'lucide-react';
 import { memo, useEffect, useState, type ReactNode } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Options } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { reviewCodeBlock } from '../../lib/assistant';
 import { remarkEmojiIcons } from '../../lib/emojiIcons';
@@ -77,11 +77,34 @@ function Code({ className, children }: { className?: string; children?: ReactNod
   return <CodeBlock code={text.replace(/\n$/, '')} tag={tag} />;
 }
 
+/** Math typesetting ($A$, $10^9$, $$…$$), downloaded the first time a reply contains math. */
+type PluggableList = NonNullable<Options['remarkPlugins']>;
+type MathPlugins = { remark: PluggableList; rehype: PluggableList };
+let mathPlugins: MathPlugins | null = null;
+let mathLoading: Promise<MathPlugins> | null = null;
+const loadMath = () =>
+  (mathLoading ??= Promise.all([import('remark-math'), import('rehype-katex'), import('katex/dist/katex.min.css')]).then(([remarkMath, rehypeKatex]) => {
+    mathPlugins = { remark: [remarkMath.default], rehype: [[rehypeKatex.default, { throwOnError: false, strict: false }]] };
+    return mathPlugins;
+  }));
+const HAS_MATH = /\$[^$\n]+\$/;
+
+function useMath(content: string): MathPlugins | null {
+  const needed = HAS_MATH.test(content);
+  const [plugins, setPlugins] = useState(mathPlugins);
+  useEffect(() => {
+    if (needed && !plugins) void loadMath().then(setPlugins);
+  }, [needed, plugins]);
+  return needed ? plugins : null;
+}
+
 export const Markdown = memo(function Markdown({ content, streaming }: { content: string; streaming?: boolean }) {
+  const math = useMath(content);
   return (
     <div className={cn('chat-md', streaming && 'stream-caret')}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkEmojiIcons]}
+        remarkPlugins={[remarkGfm, ...(math?.remark ?? []), remarkEmojiIcons]}
+        rehypePlugins={math?.rehype}
         components={{
           pre: ({ children }) => <>{children}</>,
           code: Code,
