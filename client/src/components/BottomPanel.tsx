@@ -19,7 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { DropdownMenu } from 'radix-ui';
-import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useElementWidth } from '../hooks';
 import { sendToAssistant } from '../lib/assistant';
@@ -380,45 +380,32 @@ function Tokens({ text, bad, tone }: { text: string; bad: Set<number>; tone: 'ex
   );
 }
 
-function DiffLine({ n, kind, children }: { n?: number; kind: 'same' | 'expected' | 'actual'; children: ReactNode }) {
-  return (
-    <div
-      className={cn(
-        'flex pr-3',
-        kind === 'expected' && 'bg-success/[0.07] shadow-[inset_2px_0_0_var(--success)]',
-        kind === 'actual' && 'bg-danger/[0.08] shadow-[inset_2px_0_0_var(--danger)]',
-      )}
-    >
-      <span className="w-9 shrink-0 pr-2.5 text-right text-subtle/60 tabular-nums select-none">{n}</span>
-      <span className={cn('w-8 shrink-0 font-sans text-[10.5px] leading-[inherit] font-medium select-none', kind === 'expected' ? 'text-success' : 'text-danger')}>
-        {kind === 'expected' ? 'exp' : kind === 'actual' ? 'yours' : ''}
-      </span>
-      <span className="whitespace-pre">{children}</span>
-    </div>
-  );
-}
+const missing = <i className="font-sans text-[0.9em] text-subtle">(missing)</i>;
 
+/** Expected and actual output side by side, one row per line, differing words highlighted. */
 function DiffView({ comparison }: { comparison: Comparison }) {
+  const cell = 'min-w-0 px-2.5 whitespace-pre-wrap [overflow-wrap:anywhere]';
   return (
     <div className="h-full overflow-auto pb-3 font-mono leading-[1.65]">
-      {comparison.rows.slice(0, MAX_OUTPUT_LINES).map((row, i) =>
-        row.status === 'same' ? (
-          <DiffLine key={i} n={i + 1} kind="same">
-            {row.actual || ' '}
-          </DiffLine>
-        ) : (
-          <Fragment key={i}>
-            {row.expected !== null && (
-              <DiffLine n={i + 1} kind="expected">
-                <Tokens text={row.expected} bad={row.badTokens} tone="expected" />
-              </DiffLine>
-            )}
-            <DiffLine n={row.expected === null ? i + 1 : undefined} kind="actual">
-              {row.actual === null ? <i className="font-sans text-subtle">(missing)</i> : <Tokens text={row.actual} bad={row.badTokens} tone="actual" />}
-            </DiffLine>
-          </Fragment>
-        ),
-      )}
+      <div className="sticky top-0 z-10 grid grid-cols-[2.25rem_1fr_1fr] border-b border-line bg-panel font-sans text-[11px] font-medium">
+        <span />
+        <span className="px-2.5 py-1 text-success">Expected</span>
+        <span className="border-l border-line px-2.5 py-1 text-danger">Your output</span>
+      </div>
+      {comparison.rows.slice(0, MAX_OUTPUT_LINES).map((row, i) => {
+        const differs = row.status !== 'same';
+        return (
+          <div key={i} className="grid grid-cols-[2.25rem_1fr_1fr]">
+            <span className="pr-2 text-right text-subtle/60 tabular-nums select-none">{i + 1}</span>
+            <span className={cn(cell, differs && 'bg-success/[0.07] shadow-[inset_2px_0_0_var(--success)]')}>
+              {row.expected === null ? missing : differs ? <Tokens text={row.expected} bad={row.badTokens} tone="expected" /> : row.expected || ' '}
+            </span>
+            <span className={cn(cell, 'border-l border-line', differs && 'bg-danger/[0.08]')}>
+              {row.actual === null ? missing : differs ? <Tokens text={row.actual} bad={row.badTokens} tone="actual" /> : row.actual || ' '}
+            </span>
+          </div>
+        );
+      })}
       {comparison.rows.length > MAX_OUTPUT_LINES && <div className="px-3.5 text-subtle">… {comparison.rows.length - MAX_OUTPUT_LINES} more lines</div>}
     </div>
   );

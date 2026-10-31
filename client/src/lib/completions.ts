@@ -47,6 +47,16 @@ const CPP: LanguageCompletions = {
   ],
   qualified: { std: [...CPP_STD_FUNCTIONS, 'vector', 'map', 'set', 'string', 'pair', 'cin', 'cout', 'endl'] },
   snippets: [
+    {
+      label: 'intll',
+      detail: '#define int long long (then use signed main)',
+      body: ['// Every int is 64-bit, so sums and products of large values don\'t overflow.', '#define int long long'],
+    },
+    {
+      label: 'signedmain',
+      detail: 'main() that works with #define int long long',
+      body: ['signed main() {', '\tios::sync_with_stdio(false);', '\tcin.tie(nullptr);', '', '\t$0', '', '\treturn 0;', '}'],
+    },
     { label: 'fori', detail: 'for loop 0..n-1', body: ['for (int ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {', '\t$0', '}'] },
     { label: 'forr', detail: 'reverse for loop', body: ['for (int ${1:i} = ${2:n} - 1; ${1:i} >= 0; ${1:i}--) {', '\t$0', '}'] },
     { label: 'fore', detail: 'range-based for', body: ['for (auto &${1:x} : ${2:a}) {', '\t$0', '}'] },

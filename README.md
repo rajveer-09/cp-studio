@@ -27,6 +27,7 @@ Run code against test cases like an online judge, step through it with a debugge
   - **AtCoder:** `abc300_a`
 
   You get the statement, with math typeset (KaTeX) as on the judge's site, plus the sample tests and the time limit. An import can be undone.
+- **Submit on Codeforces / CodeChef / LeetCode / AtCoder** copies your code (for LeetCode, just the `Solution` class) and opens the judge's submit page with the problem selected.
 - The sample tests appear under the statement as **Input / Output** cards with copy buttons. They are also loaded as your test cases, and **Use as test cases** puts them back after you've changed them.
 - **Codeforces** blocks automated downloads, so a one-click **Send to CP Studio** bookmark reads the problem from the page you have open.
 - **LeetCode** problems are methods rather than programs. Importing one opens a tab (e.g. `two-sum.cpp`) in each language, with the `Solution` class ready to fill in. The code that reads each test and prints the answer in LeetCode's format sits in collapsed blocks above and below it, built from LeetCode's own type information (no AI needed). Design problems such as `LRUCache` get an AI-written `main()` via **Starter + main()**.
@@ -83,6 +84,7 @@ Run code against test cases like an online judge, step through it with a debugge
 - **Formatting** with clang-format (C++/Java) and Ruff (Python). Both run in the browser as WebAssembly.
 - **CP templates** (multi-test, fast I/O, blank) and your own saved templates, plus **Reset** to start over. Reset can be undone.
 - **Download** the active tab as a file, or all your tabs as a `.zip`.
+- **Save to GitHub**: sign in with your own GitHub account and commit solutions to your repository (e.g. `codeforces/1904A.cpp`); the repository is created on first save.
 - Resizable panels, with the test panel **below or beside** the editor. Your work is saved in the browser automatically.
 - **Lock layout** (`Alt+K` or the lock button) so panels can't be resized, moved or hidden by accident while you code.
 - **Keyboard shortcuts** for everything.
@@ -164,6 +166,7 @@ Set these in `server/.env` locally, or as environment variables when deploying.
 | `GEMINI_MODEL` | `gemini-3.6-flash` | Main Gemini model |
 | `GEMINI_FALLBACK_MODELS` | `gemini-3.5-flash-lite,gemini-3.1-flash-lite` | Used in order when every key is out of quota on the main model |
 | `ACCESS_KEY` | (empty) | Optional shared password that visitors enter once |
+| `GITHUB_CLIENT_ID` `GITHUB_CLIENT_SECRET` | (empty) | A GitHub OAuth App for **Save to GitHub**; each user signs in with their own account |
 | `PORT` | `3001` | HTTP port |
 | `TRUST_PROXY` | `1` in Docker | Set behind a reverse proxy, so rate limits see real IPs |
 | `CXX` `JAVAC` `JAVA` `PYTHON` `GDB` | `g++` `javac` `java` `python3` `gdb` | Toolchain commands |

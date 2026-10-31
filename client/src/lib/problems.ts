@@ -4,6 +4,7 @@ import type { ImportedProblem, Language, Platform, ProblemMeta } from '../types'
 import { api } from './api';
 import { editorBridge } from './editor';
 import { LANGUAGE_META, LANGUAGES } from './languages';
+import { copyText } from './platform';
 import { DEFAULT_CODE } from './templates';
 
 export const PLATFORM_META: Record<Platform, { label: string; placeholder: string }> = {
@@ -218,6 +219,53 @@ export function listenForImports(): () => void {
     void importCodeforcesPage(e.data.page);
   };
   return () => channel.close();
+}
+
+/**
+ * The judge's page for submitting this problem. Codeforces and AtCoder have a submit form that preselects
+ * the problem; on CodeChef and LeetCode the editor and Submit button are on the problem page itself.
+ */
+export function submitUrl(meta: Pick<ProblemMeta, 'platform' | 'url'>): string {
+  if (meta.platform === 'codeforces') {
+    const contest = /codeforces\.com\/(contest|gym)\/(\d+)\/problem\/(\w+)/i.exec(meta.url);
+    if (contest) return `https://codeforces.com/${contest[1]}/${contest[2]}/submit/${contest[3]}`;
+    const problemset = /problemset\/problem\/(\d+)\/(\w+)/i.exec(meta.url);
+    if (problemset) return `https://codeforces.com/contest/${problemset[1]}/submit/${problemset[2]}`;
+  }
+  if (meta.platform === 'atcoder') {
+    const task = /atcoder\.jp\/contests\/([\w-]+)\/tasks\/([\w-]+)/i.exec(meta.url);
+    if (task) return `https://atcoder.jp/contests/${task[1]}/submit?taskScreenName=${task[2]}`;
+  }
+  return meta.url;
+}
+
+/** The code as the judge wants it: LeetCode takes only the Solution class, without the folded harness. */
+export function codeForSubmission(code: string): string {
+  const kept: string[] = [];
+  let inHarness = false;
+  for (const line of code.split('\n')) {
+    if (!inHarness && /\bregion\b.*LeetCode harness/.test(line)) inHarness = true;
+    else if (inHarness && /^\s*(?:#pragma\s+endregion|\/\/\s*#endregion|#endregion)\b/.test(line)) inHarness = false;
+    else if (!inHarness) kept.push(line);
+  }
+  return `${kept.join('\n').trim()}\n`;
+}
+
+/** Copies the active tab's code (ready to paste) and opens the judge's submit page. */
+export async function openSubmission(meta: Pick<ProblemMeta, 'platform' | 'url'>) {
+  const { language } = useStore.getState();
+  const code = codeForSubmission(editorBridge.getCode(language));
+  const site = PLATFORM_META[meta.platform].label;
+  // Opened first, while the click still counts as a user action (popup blockers allow that).
+  window.open(submitUrl(meta), '_blank', 'noopener');
+  try {
+    await copyText(code);
+    toast.success(`Your ${LANGUAGE_META[language].label} code is copied`, {
+      description: `Paste it on ${site} (Ctrl+V)${meta.platform === 'codeforces' || meta.platform === 'atcoder' ? ' and pick the language there' : ''}.`,
+    });
+  } catch {
+    toast.info(`Opened ${site}`, { description: 'Copy your code from the editor (Ctrl+A, Ctrl+C) and paste it there.' });
+  }
 }
 
 /** LeetCode: asks the AI for the starter code plus a main() that runs one example from stdin. */

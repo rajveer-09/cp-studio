@@ -1,4 +1,4 @@
-import { Bookmark, Check, ChevronDown, Clock, Copy, Download, ExternalLink, FlaskConical, Pencil, RotateCcw, Wand2, X } from 'lucide-react';
+import { Bookmark, Check, ChevronDown, Clock, Copy, Download, ExternalLink, FlaskConical, Pencil, RotateCcw, Send, Wand2, X } from 'lucide-react';
 import { DropdownMenu } from 'radix-ui';
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
@@ -12,6 +12,7 @@ import {
   PLATFORM_META,
   PLATFORM_ORDER,
   openProblemTabs,
+  openSubmission,
   requestLeetCodeDriver,
 } from '../lib/problems';
 import { restoreSamples } from '../lib/testcases';
@@ -204,6 +205,12 @@ function ProblemHeader({ meta, editing, onToggleEdit }: { meta: ProblemMeta; edi
           </Tip>
         )
       )}
+      <Tip label={`Copy your ${LANGUAGE_META[language].label} code and open the ${PLATFORM_META[meta.platform].label} submit page`}>
+        <Button size="sm" variant="primary" onClick={() => openSubmission(meta)}>
+          <Send />
+          Submit on {PLATFORM_META[meta.platform].label}
+        </Button>
+      </Tip>
       <Button size="sm" variant="ghost" onClick={onToggleEdit}>
         {editing ? <Check /> : <Pencil />}
         {editing ? 'Done' : 'Edit'}

@@ -25,6 +25,30 @@ int main() {
 }
 `;
 
+const CPP_LONG_LONG = `#include <bits/stdc++.h>
+using namespace std;
+
+// Every int is 64-bit, so sums and products of large values don't overflow.
+#define int long long
+#define all(x) (x).begin(), (x).end()
+
+void solve() {
+    // write your code here
+
+}
+
+// main() must return a plain int, which "#define int" would change, so it is declared signed.
+signed main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    int t = 1;
+    cin >> t;
+    while (t--) solve();
+    return 0;
+}
+`;
+
 const CPP_FAST = `#include <bits/stdc++.h>
 using namespace std;
 
@@ -192,6 +216,7 @@ if __name__ == "__main__":
 
 export const BUILTIN_TEMPLATES: Template[] = [
   { id: 'cpp-multi', language: 'cpp', name: 'Multi-test', description: 'solve() + t test cases, fast I/O', code: CPP_MULTI, builtin: true },
+  { id: 'cpp-long-long', language: 'cpp', name: 'Multi-test (int = long long)', description: '#define int long long + signed main, no overflows', code: CPP_LONG_LONG, builtin: true },
   { id: 'cpp-fast', language: 'cpp', name: 'CP Fast I/O', description: 'bits/stdc++, aliases, constants', code: CPP_FAST, builtin: true },
   { id: 'cpp-blank', language: 'cpp', name: 'Blank', description: 'Minimal main()', code: CPP_BLANK, builtin: true },
   { id: 'java-multi', language: 'java', name: 'Multi-test', description: 'FastReader + PrintWriter, t test cases', code: JAVA_MULTI, builtin: true },
