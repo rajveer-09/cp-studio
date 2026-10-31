@@ -9,9 +9,10 @@ import path from 'node:path';
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { keyStatus, MODELS } from './ai/keys.js';
-import { aiEnabled, config } from './config.js';
+import { aiEnabled, config, githubEnabled } from './config.js';
 import { aiRouter } from './routes/ai.js';
 import { debugRouter } from './routes/debug.js';
+import { githubRouter } from './routes/github.js';
 import { problemsRouter } from './routes/problems.js';
 import { runRouter } from './routes/run.js';
 import { initRunner } from './runner/index.js';
@@ -53,11 +54,15 @@ app.get('/api/config', async (_req, res) => {
     aiKeys,
     model: aiKeys.activeModel ?? config.gemini.model,
     accessKeyRequired: Boolean(config.accessKey),
+    github: githubEnabled,
     toolchains: languages,
     debuggers: { cpp: languages.cpp.available && gdb.available, java: languages.java.available, python: languages.python.available },
     limits: { maxTimeLimitMs: config.limits.maxTimeLimitMs, maxTests: config.limits.maxTests, maxDebugSteps: config.debugger.maxSteps },
   });
 });
+
+// The GitHub sign-in runs in a popup, which can't send the access key; it only hands users their own token.
+app.use('/api/github', limiter(20, 'GitHub sign-in'), githubRouter);
 
 app.use('/api', requireAccessKey);
 app.post('/api/auth/check', (_req, res) => res.json({ ok: true }));

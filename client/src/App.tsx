@@ -1,16 +1,18 @@
 import { Tooltip } from 'radix-ui';
 import { useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { Toaster } from 'sonner';
+import { toast, Toaster } from 'sonner';
 import { AssistantPanel } from './components/assistant/AssistantPanel';
 import { BottomPanel } from './components/BottomPanel';
 import { CodeEditor } from './components/CodeEditor';
 import { AccessKeyDialog, ResetDialog, SaveTemplateDialog, SettingsDialog, ShortcutsDialog } from './components/Dialogs';
 import { FixReviewDialog } from './components/FixReviewDialog';
 import { GenerateTestsDialog } from './components/GenerateTestsDialog';
+import { GithubDialog } from './components/GithubDialog';
 import { Header } from './components/Header';
 import { StatusBar } from './components/StatusBar';
 import { useMediaQuery, useServerConfig, useShortcuts, useThemeSync } from './hooks';
+import { resumeGithubSignIn } from './lib/github';
 import { listenForImports } from './lib/problems';
 import { themeById } from './lib/themes';
 import { useStore } from './store';
@@ -53,6 +55,13 @@ export default function App() {
   useShortcuts();
   useServerConfig();
   useEffect(listenForImports, []);
+  useEffect(() => {
+    // A GitHub sign-in done in this window (popups blocked) finishes here.
+    resumeGithubSignIn().then(
+      (account) => account && toast.success(`Connected to GitHub as @${account.login}`),
+      (err) => toast.error(err instanceof Error ? err.message : 'GitHub sign-in failed.'),
+    );
+  }, []);
   const theme = useStore((s) => s.theme);
 
   return (
@@ -71,6 +80,7 @@ export default function App() {
       <SaveTemplateDialog />
       <ResetDialog />
       <GenerateTestsDialog />
+      <GithubDialog />
       <Toaster theme={themeById(theme).dark ? 'dark' : 'light'} position="top-center" offset={60} richColors />
     </Tooltip.Provider>
   );

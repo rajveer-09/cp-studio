@@ -10,6 +10,7 @@ import { LANGUAGE_META } from '../lib/languages';
 import { monacoThemeName } from '../lib/themes';
 import { activeFileOf, useStore } from '../store';
 import { FileTabs } from './FileTabs';
+import { GithubMark } from './GithubDialog';
 import { Button, Tip } from './ui';
 
 const clip = (text: string) => (text.length > 40 ? `${text.slice(0, 40)}…` : text);
@@ -75,6 +76,18 @@ function DownloadMenu() {
   );
 }
 
+function GithubButton() {
+  const enabled = useStore((s) => s.serverConfig?.github);
+  if (!enabled) return null;
+  return (
+    <Tip label="Save this tab to your GitHub repository">
+      <Button size="sm" variant="ghost" onClick={() => useStore.getState().openDialog('github')} aria-label="Save to GitHub">
+        <GithubMark className="size-3.5" />
+      </Button>
+    </Tip>
+  );
+}
+
 export function CodeEditor() {
   const language = useStore((s) => s.language);
   const theme = useStore((s) => s.theme);
@@ -121,6 +134,7 @@ export function CodeEditor() {
           </Button>
         </Tip>
         <DownloadMenu />
+        <GithubButton />
         </div>
       </div>
       <div className="min-h-0 flex-1">

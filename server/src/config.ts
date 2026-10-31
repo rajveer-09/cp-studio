@@ -74,6 +74,14 @@ export const config = {
     cxxPchDir: text('CXX_PCH_DIR'),
   },
 
+  /** A GitHub OAuth App, for "Save to GitHub" (optional). Users sign in with their own accounts. */
+  github: {
+    clientId: text('GITHUB_CLIENT_ID'),
+    clientSecret: text('GITHUB_CLIENT_SECRET'),
+    /** The site's public address, if it can't be worked out from requests (e.g. https://cp-studio.onrender.com). */
+    publicUrl: text('PUBLIC_URL'),
+  },
+
   /** CPU cores allowed by the container (null: no limit found). */
   cpuLimit,
 
@@ -101,3 +109,4 @@ export const config = {
 };
 
 export const aiEnabled = config.gemini.apiKeys.length > 0;
+export const githubEnabled = Boolean(config.github.clientId && config.github.clientSecret);

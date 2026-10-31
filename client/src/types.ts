@@ -86,7 +86,7 @@ export interface Template {
 }
 
 export type BottomTab = 'tests' | 'console' | 'debug' | 'problem';
-export type DialogName = 'settings' | 'shortcuts' | 'access' | 'saveTemplate' | 'reset' | 'generateTests';
+export type DialogName = 'settings' | 'shortcuts' | 'access' | 'saveTemplate' | 'reset' | 'generateTests' | 'github';
 
 export type Platform = 'codeforces' | 'codechef' | 'leetcode' | 'atcoder';
 
@@ -187,6 +187,8 @@ export interface ServerConfig {
   /** API keys that can still use the main model right now; `activeModel` is null when every key is out of quota. */
   aiKeys?: { total: number; available: number; activeModel: string | null };
   accessKeyRequired: boolean;
+  /** "Save to GitHub" is set up on the server (a GitHub OAuth App). */
+  github?: boolean;
   toolchains: Record<Language, ToolchainInfo>;
   debuggers: Record<Language, boolean>;
   limits: { maxTimeLimitMs: number; maxTests: number; maxDebugSteps: number };
