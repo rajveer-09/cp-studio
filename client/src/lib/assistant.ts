@@ -2,6 +2,7 @@ import { toast } from 'sonner';
 import { activeFileOf, useStore } from '../store';
 import type { ChatMessage, Language } from '../types';
 import { api, type AiContext } from './api';
+import { requireAi } from './auth';
 import { normalizeLines } from './compare';
 import { editorBridge } from './editor';
 import { isFailing, VERDICT_META } from './languages';
@@ -89,10 +90,7 @@ export async function sendToAssistant(raw: string): Promise<void> {
   const text = raw.trim();
   const state = useStore.getState();
   if (!text || state.aiBusy) return;
-  if (!state.serverConfig?.aiEnabled) {
-    toast.error('The AI assistant is not configured on the server.');
-    return;
-  }
+  if (!requireAi()) return;
 
   const match = /^\/(\w+)\s*([\s\S]*)$/.exec(text);
   const command = match ? COMMANDS.find((c) => c.name === match[1].toLowerCase()) : undefined;

@@ -1,5 +1,6 @@
 import { importAtCoder } from './atcoder.js';
 import { importCodeChef } from './codechef.js';
+import { codeforcesInfo } from './codeforcesInfo.js';
 import { importLeetCode } from './leetcode.js';
 import { htmlToMarkdown } from './markdown.js';
 import { ImportError, withNewline, type ImportedProblem, type Platform } from './types.js';
@@ -32,10 +33,11 @@ export interface CodeforcesPage {
   tests: { input: string; expected: string }[];
 }
 
-/** A Codeforces problem read by the bookmark from the page the user has open. */
-export function fromCodeforcesPage(page: CodeforcesPage): ImportedProblem {
+/** A Codeforces problem read by the bookmark from the page the user has open, plus its topics and rating from the API. */
+export async function fromCodeforcesPage(page: CodeforcesPage): Promise<ImportedProblem> {
   const id = /\/(?:contest|problemset\/problem|gym)\/(\d+)\/(?:problem\/)?([A-Za-z]\d?)/.exec(page.url);
   const seconds = /([\d.]+)\s*second/i.exec(page.timeLimit);
+  const info = id ? await codeforcesInfo(`${id[1]}${id[2].toUpperCase()}`) : null;
   return {
     platform: 'codeforces',
     id: id ? `${id[1]}${id[2].toUpperCase()}` : '',
@@ -44,5 +46,7 @@ export function fromCodeforcesPage(page: CodeforcesPage): ImportedProblem {
     statement: htmlToMarkdown(page.html, page.url),
     tests: page.tests.map((t) => ({ input: withNewline(t.input), expected: withNewline(t.expected) })),
     timeLimitMs: seconds ? Math.round(Number(seconds[1]) * 1000) : undefined,
+    tags: info?.tags.length ? info.tags : undefined,
+    rating: info?.rating,
   };
 }

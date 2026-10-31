@@ -7,6 +7,7 @@ import { remarkEmojiIcons } from '../../lib/emojiIcons';
 import { LANGUAGE_META, languageFromFence } from '../../lib/languages';
 import { monaco } from '../../lib/monaco';
 import { copyText } from '../../lib/platform';
+import { editorThemeOf } from '../../lib/themes';
 import { useStore } from '../../store';
 import type { Language } from '../../types';
 import { PremiumIcon, type IconName } from '../PremiumIcon';
@@ -21,7 +22,7 @@ function looksLikeFullProgram(code: string, language: Language): boolean {
 
 function CodeBlock({ code, tag }: { code: string; tag?: string }) {
   const language = languageFromFence(tag);
-  const theme = useStore((s) => s.theme);
+  const theme = useStore(editorThemeOf);
   const aiBusy = useStore((s) => s.aiBusy);
   const [html, setHtml] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);

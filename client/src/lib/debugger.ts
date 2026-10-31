@@ -5,7 +5,9 @@ import { api } from './api';
 import { isWatchable } from './completions';
 import { parseDiagnostics } from './diagnostics';
 import { editorBridge } from './editor';
+import { programOf, tabLine, toTabLines } from './harness';
 import { LANGUAGE_META } from './languages';
+import { recordActivity } from './problems';
 
 export const MAX_WATCHES = 8;
 
@@ -55,9 +57,22 @@ export async function startDebugging() {
   const code = editorBridge.getCode(language, fileId);
   const base = { language, fileId, code, testIndex, watches: [...watches], steps: [], truncated: false, maxSteps: 0, stdout: '', stderr: '' };
   useStore.setState({ debug: { ...base, status: 'running' }, debugStep: 0, bottomTab: 'debug' });
+  recordActivity('debug');
 
   try {
-    const result = await api.debug({ language, code, cppStandard: state.settings.cppStandard, input: state.tests[testIndex].input, watches });
+    // With a hidden LeetCode driver, the program is the driver around the tab's code; steps come back on the tab's lines.
+    const program = programOf(language, fileId);
+    const raw = await api.debug({ language, code: program.code, cppStandard: state.settings.cppStandard, input: state.tests[testIndex].input, watches });
+    const result = {
+      ...raw,
+      compile: { ...raw.compile, output: toTabLines(raw.compile.output, program) },
+      stderr: toTabLines(raw.stderr, program),
+      steps: raw.steps.flatMap((step) => {
+        const line = tabLine(step.line, program);
+        return line === null ? [] : [{ ...step, line }];
+      }),
+      errorLine: raw.errorLine ? (tabLine(raw.errorLine, program) ?? undefined) : raw.errorLine,
+    };
     if (!result.compile.ok) {
       editorBridge.setDiagnostics(language, parseDiagnostics(language, result.compile.output));
       useStore.setState({ debug: { ...base, status: 'error', compile: result.compile, message: 'Compilation failed.' } });

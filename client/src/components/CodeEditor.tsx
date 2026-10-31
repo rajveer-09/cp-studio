@@ -1,13 +1,14 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { AlignLeft, Download, FileArchive, FileDown, Loader2, RotateCcw } from 'lucide-react';
+import { AlignLeft, Download, FileArchive, FileDown, Loader2, Maximize2, Minimize2, RotateCcw } from 'lucide-react';
 import { DropdownMenu } from 'radix-ui';
 import { useEffect } from 'react';
 import { isWatchable } from '../lib/completions';
 import { debugVariable } from '../lib/debugger';
 import { downloadActiveFile, downloadZip } from '../lib/download';
 import { editorBridge, modelPath } from '../lib/editor';
+import { toggleEditorFocus } from '../lib/layout';
 import { LANGUAGE_META } from '../lib/languages';
-import { monacoThemeName } from '../lib/themes';
+import { editorThemeOf, monacoThemeName } from '../lib/themes';
 import { activeFileOf, useStore } from '../store';
 import { FileTabs } from './FileTabs';
 import { GithubMark } from './GithubDialog';
@@ -76,6 +77,17 @@ function DownloadMenu() {
   );
 }
 
+function EditorFocusButton() {
+  const focus = useStore((s) => s.editorFocus);
+  return (
+    <Tip label={focus ? 'Back to the full layout' : 'Editor only, full screen'} keys={['Alt', 'Z']}>
+      <Button size="sm" variant={focus ? 'secondary' : 'ghost'} onClick={toggleEditorFocus} aria-label={focus ? 'Exit editor full screen' : 'Editor full screen'}>
+        {focus ? <Minimize2 /> : <Maximize2 />}
+      </Button>
+    </Tip>
+  );
+}
+
 function GithubButton() {
   const enabled = useStore((s) => s.serverConfig?.github);
   if (!enabled) return null;
@@ -90,7 +102,7 @@ function GithubButton() {
 
 export function CodeEditor() {
   const language = useStore((s) => s.language);
-  const theme = useStore((s) => s.theme);
+  const editorTheme = useStore(editorThemeOf);
   const settings = useStore((s) => s.settings);
   const setCode = useStore((s) => s.setCode);
   useStore((s) => s.activeFile[s.language]); // re-render when the active tab changes
@@ -133,6 +145,7 @@ export function CodeEditor() {
             <span className="hidden md:inline">Reset</span>
           </Button>
         </Tip>
+        <EditorFocusButton />
         <DownloadMenu />
         <GithubButton />
         </div>
@@ -144,7 +157,7 @@ export function CodeEditor() {
           language={meta.monaco}
           defaultValue={file.code}
           keepCurrentModel
-          theme={monacoThemeName(theme)}
+          theme={monacoThemeName(editorTheme)}
           onChange={(value) => setCode(language, value ?? '', file.id)}
           onMount={handleMount}
           loading={<Loader2 className="size-5 animate-spin text-subtle" />}

@@ -3,43 +3,43 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --bg: #eceef3;
+  --bg: #eaeef2;
   --panel: #ffffff;
-  --panel-2: #f6f7f9;
-  --hover: #eef0f4;
-  --border: #e0e3ea;
-  --border-strong: #cdd2dc;
-  --fg: #151922;
-  --muted: #5b6375;
-  --subtle: #8a91a3;
-  --accent: #e8780a;
-  --accent-hover: #d46a00;
-  --accent-fg: #1c1305;
-  --success: #15a356;
-  --danger: #e5484d;
-  --warning: #ca8a04;
-  --info: #0b84d8;
+  --panel-2: #f6f8fa;
+  --hover: #eef1f4;
+  --border: #d0d7de;
+  --border-strong: #afb8c1;
+  --fg: #1f2328;
+  --muted: #59636e;
+  --subtle: #818b98;
+  --accent: #0969da;
+  --accent-hover: #0860c7;
+  --accent-fg: #ffffff;
+  --success: #1a7f37;
+  --danger: #cf222e;
+  --warning: #9a6700;
+  --info: #0969da;
   --shadow: 0 12px 40px rgb(15 20 30 / 0.14);
   color-scheme: light;
 }
 
 .dark {
-  --bg: #0f0f10;
-  --panel: #18181a;
-  --panel-2: #1f1f22;
-  --hover: #26262a;
-  --border: #2a2a2e;
-  --border-strong: #3a3a40;
-  --fg: #ececee;
-  --muted: #a3a3ab;
-  --subtle: #6e6e78;
-  --accent: #ffa116;
-  --accent-hover: #ffb240;
-  --accent-fg: #1c1305;
-  --success: #2cbb5d;
-  --danger: #ef4743;
-  --warning: #ffc01e;
-  --info: #4aa8ff;
+  --bg: #010409;
+  --panel: #0d1117;
+  --panel-2: #161b22;
+  --hover: #1c2128;
+  --border: #21262d;
+  --border-strong: #30363d;
+  --fg: #e6edf3;
+  --muted: #9198a1;
+  --subtle: #6e7681;
+  --accent: #2f81f7;
+  --accent-hover: #4493f8;
+  --accent-fg: #ffffff;
+  --success: #3fb950;
+  --danger: #f85149;
+  --warning: #d29922;
+  --info: #58a6ff;
   --shadow: 0 16px 50px rgb(0 0 0 / 0.55);
   color-scheme: dark;
 }
@@ -314,7 +314,7 @@
 }
 /* Problem statements */
 .statement {
-  font-size: 13.5px;
+  font-size: var(--statement-size, 13.5px);
   line-height: 1.7;
   color: color-mix(in srgb, var(--fg) 90%, var(--muted));
   overflow-wrap: break-word;
@@ -513,6 +513,77 @@
   border-color: var(--border);
 }
 
+/* Enhanced display: the same statement, laid out for reading like LeetCode's problem page */
+.statement.statement-enhanced {
+  line-height: 1.75;
+  color: color-mix(in srgb, var(--fg) 94%, var(--muted));
+}
+.statement-enhanced p,
+.statement-enhanced ul,
+.statement-enhanced ol,
+.statement-enhanced table,
+.statement-enhanced .statement-pre {
+  margin: 0 0 1em;
+}
+/* Section titles (Input, Output, Constraints, Note): bold labels with a colon, no rules */
+.statement-enhanced h3,
+.statement-enhanced h4 {
+  margin: 1.9em 0 0.75em;
+  padding: 0;
+  border: 0;
+  font-size: 1em;
+  font-weight: 650;
+  letter-spacing: 0;
+  color: var(--fg);
+}
+.statement-enhanced h3::after,
+.statement-enhanced h4::after {
+  content: ':';
+}
+/* LeetCode's examples: a block with a quiet rule on its left, labels bold, values in monospace */
+.statement-enhanced blockquote {
+  margin: 0 0 1.2em;
+  padding: 0.2em 0 0.2em 1.1em;
+  border-left: 2px solid var(--border-strong);
+  border-radius: 0;
+  background: none;
+}
+.statement-enhanced blockquote > p {
+  margin: 0.45em 0;
+}
+.statement-enhanced blockquote code {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  font-size: 0.92em;
+  color: color-mix(in srgb, var(--fg) 82%, var(--muted));
+}
+/* Code and values as soft pills */
+.statement-enhanced :not(pre) > code {
+  padding: 0.14em 0.4em;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 9%, transparent);
+  font-size: 0.85em;
+}
+.statement-enhanced blockquote :not(pre) > code {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+.statement-enhanced li + li {
+  margin-top: 0.45em;
+}
+.statement-enhanced li::marker {
+  color: var(--muted);
+}
+.statement-enhanced pre,
+.statement-enhanced .katex-display {
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+}
+
 /* Primary buttons: the accent with a soft top light, a crisp darker edge and a small drop shadow */
 .btn-primary {
   color: var(--accent-fg);
@@ -655,4 +726,10 @@
 .colorized {
   font-family: var(--font-mono);
   white-space: pre;
+}
+
+/* Edge adds its own show-password eye; the sign-in form has one already. */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
 }

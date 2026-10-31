@@ -47,10 +47,13 @@ export const SHORTCUTS: ShortcutGroup[] = [
   {
     group: 'General',
     items: [
-      { keys: ['Alt', 'T'], label: 'Switch between your dark and light theme' },
+      { keys: ['Alt', 'T'], label: 'Switch the app between dark and light' },
       { keys: ['Alt', 'L'], label: 'Move test panel right / bottom' },
       { keys: ['Alt', 'B'], label: 'Show / hide the assistant panel' },
       { keys: ['Alt', 'K'], label: 'Lock / unlock the layout' },
+      { keys: ['Alt', 'H'], label: 'Hide / show the top bar' },
+      { keys: ['Alt', 'Enter'], label: 'Full screen' },
+      { keys: ['Alt', 'Z'], label: 'Editor only, full screen' },
       { keys: ['Alt', '/'], label: 'Show keyboard shortcuts' },
     ],
   },

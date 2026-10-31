@@ -45,6 +45,8 @@ interface Question {
   exampleTestcaseList: string[];
   metaData: string | null;
   codeSnippets: { langSlug: string; code: string }[] | null;
+  difficulty: 'Easy' | 'Medium' | 'Hard' | null;
+  topicTags: { name: string }[] | null;
 }
 
 /** LeetCode prints answers without spaces ([0,1]); statements sometimes add them ([0, 1]). Strings keep theirs. */
@@ -57,7 +59,7 @@ export async function importLeetCode(ref: string): Promise<ImportedProblem> {
   const { question } = await graphql<{ question: Question | null }>(
     `query problem($slug: String!) {
       question(titleSlug: $slug) {
-        questionFrontendId title titleSlug isPaidOnly content exampleTestcaseList metaData codeSnippets { langSlug code }
+        questionFrontendId title titleSlug isPaidOnly content exampleTestcaseList metaData codeSnippets { langSlug code } difficulty topicTags { name }
       }
     }`,
     { slug },
@@ -83,6 +85,8 @@ export async function importLeetCode(ref: string): Promise<ImportedProblem> {
     statement: groupExamples(htmlToMarkdown(question.content, url)),
     tests,
     functionBased: true,
+    difficulty: question.difficulty ?? undefined,
+    tags: question.topicTags?.map((t) => t.name),
     snippets,
     programs: leetCodePrograms(question.metaData, snippets),
   };

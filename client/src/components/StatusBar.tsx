@@ -1,4 +1,5 @@
 import { Check, Keyboard, Loader2 } from 'lucide-react';
+import { aiAccess } from '../lib/auth';
 import { LANGUAGE_META } from '../lib/languages';
 import { useRunSummary } from '../lib/verdict';
 import { useStore } from '../store';
@@ -13,7 +14,7 @@ export function StatusBar() {
   const summary = useRunSummary();
   const running = useStore((s) => s.running);
   const serverOnline = useStore((s) => s.serverOnline);
-  const config = useStore((s) => s.serverConfig);
+  const ai = useStore(aiAccess);
   const meta = LANGUAGE_META[language];
 
   return (
@@ -49,8 +50,8 @@ export function StatusBar() {
       )}
 
       <span className="flex items-center gap-1.5">
-        <span className={cn('size-1.5 rounded-full', !serverOnline ? 'bg-danger' : config?.aiEnabled ? 'bg-success' : 'bg-subtle')} />
-        {!serverOnline ? 'Server offline' : config?.aiEnabled ? 'AI ready' : 'AI off'}
+        <span className={cn('size-1.5 rounded-full', !serverOnline ? 'bg-danger' : ai === 'ok' ? 'bg-success' : 'bg-subtle')} />
+        {!serverOnline ? 'Server offline' : ai === 'ok' ? 'AI ready' : ai === 'signin' ? 'Sign in for AI' : 'AI off'}
       </span>
       <button
         type="button"

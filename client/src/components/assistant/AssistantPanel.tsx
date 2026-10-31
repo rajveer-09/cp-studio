@@ -17,7 +17,9 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { navigate } from 'wouter/use-browser-location';
 import { addGeneratedTests, COMMANDS, openFixReview, retryMessage, sendToAssistant, stopAssistant, type AssistantCommand } from '../../lib/assistant';
+import { aiAccess, goToSignIn } from '../../lib/auth';
 import { LANGUAGE_META, TONE_BG, VERDICT_META } from '../../lib/languages';
 import { changeLayout } from '../../lib/layout';
 import { testVerdict } from '../../lib/verdict';
@@ -362,9 +364,30 @@ function NotConfigured() {
   );
 }
 
+function SignInPrompt() {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+      <div className="mb-3 grid size-11 place-items-center rounded-xl bg-panel-2 text-accent ring-1 ring-line">
+        <Sparkles className="size-5" />
+      </div>
+      <h3 className="text-[15px] font-semibold">Sign in to use the assistant</h3>
+      <p className="mt-1 max-w-[280px] text-[13px] leading-relaxed text-muted">
+        It reads your code, tests and errors to give hints, fixes and new test cases. Free with a CP Studio account.
+      </p>
+      <div className="mt-5 flex gap-2">
+        <Button variant="primary" onClick={() => goToSignIn()}>
+          Sign in
+        </Button>
+        <Button onClick={() => navigate('/signup')}>Create account</Button>
+      </div>
+    </div>
+  );
+}
+
 export function AssistantPanel() {
   const chat = useStore((s) => s.chat);
   const config = useStore((s) => s.serverConfig);
+  const access = useStore(aiAccess);
   const busy = useStore((s) => s.aiBusy);
   const { clearChat, setAssistantOpen } = useStore.getState();
   const fallback = config?.aiKeys?.activeModel && config.aiKeys.available === 0;
@@ -415,6 +438,8 @@ export function AssistantPanel() {
 
       {config && !config.aiEnabled ? (
         <NotConfigured />
+      ) : access === 'signin' ? (
+        <SignInPrompt />
       ) : (
         <>
           <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-3 py-4">

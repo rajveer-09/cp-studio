@@ -14,6 +14,21 @@ export interface CodeFile {
   id: string;
   name: string;
   code: string;
+  /** LeetCode: the driver around the Solution class, hidden from the tab and added back when the code runs. */
+  harness?: { before: string; after: string };
+}
+
+/** The contest timer: a stopwatch, or a countdown that keeps going into overtime. */
+export interface TimerState {
+  mode: 'stopwatch' | 'countdown';
+  /** Countdown length. */
+  durationMs: number;
+  /** When it was last started (null while paused). */
+  startedAt: number | null;
+  /** Time counted before the last start. */
+  elapsedMs: number;
+  /** The countdown's end has been announced. */
+  alerted?: boolean;
 }
 
 export type Outcome = 'ok' | 'TLE' | 'RE' | 'CE' | 'OLE' | 'IE';
@@ -74,6 +89,18 @@ export interface Settings {
   uiContrast: number;
   /** Panels can't be resized, moved or shown/hidden while locked. */
   layoutLocked: boolean;
+  /** Hide the editor page's top bar for more room (Alt+H). */
+  headerHidden: boolean;
+  /** How an imported statement looks: the editor theme's colors, warm paper, or a deep night palette. */
+  statementColors: 'theme' | 'paper' | 'night';
+  /** 'enhanced': a LeetCode-style reading layout (same text); 'standard': as imported. */
+  statementLayout: 'enhanced' | 'standard';
+  /** Start the stopwatch whenever a problem is imported. */
+  timerAutoStart: boolean;
+  /** LeetCode: 'hidden' shows only the Solution class (like LeetCode); 'shown' keeps the driver in the tab, folded. */
+  leetcodeDriver: 'hidden' | 'shown';
+  /** Statement text size in px. */
+  statementSize: number;
 }
 
 export interface Template {
@@ -86,7 +113,7 @@ export interface Template {
 }
 
 export type BottomTab = 'tests' | 'console' | 'debug' | 'problem';
-export type DialogName = 'settings' | 'shortcuts' | 'access' | 'saveTemplate' | 'reset' | 'generateTests' | 'github';
+export type DialogName = 'settings' | 'shortcuts' | 'access' | 'saveTemplate' | 'reset' | 'generateTests' | 'github' | 'submitHelper';
 
 export type Platform = 'codeforces' | 'codechef' | 'leetcode' | 'atcoder';
 
@@ -100,6 +127,11 @@ export interface ImportedProblem {
   timeLimitMs?: number;
   /** LeetCode: the solution is a method, not a program reading stdin. */
   functionBased?: boolean;
+  /** LeetCode's difficulty and topics, when the judge publishes them. */
+  difficulty?: 'Easy' | 'Medium' | 'Hard';
+  tags?: string[];
+  /** Codeforces difficulty rating (800, 900, …), once Codeforces publishes it. */
+  rating?: number;
   snippets?: Partial<Record<Language, string>>;
   /** LeetCode: the snippet wrapped in a harness (folded in the editor) that runs one test from stdin. */
   programs?: Partial<Record<Language, string>>;
@@ -181,6 +213,17 @@ export interface ToolchainInfo {
   version: string;
 }
 
+export type SocialProvider = 'google' | 'github';
+
+export interface AccountUser {
+  id: string;
+  name: string;
+  email: string;
+  image?: string | null;
+}
+
+export type AccountState = { status: 'loading' | 'signedOut'; user: null } | { status: 'signedIn'; user: AccountUser };
+
 export interface ServerConfig {
   aiEnabled: boolean;
   model: string;
@@ -189,6 +232,8 @@ export interface ServerConfig {
   accessKeyRequired: boolean;
   /** "Save to GitHub" is set up on the server (a GitHub OAuth App). */
   github?: boolean;
+  /** Accounts are on (the server has a database); `providers` are the sign-in options besides email. */
+  accounts?: { providers: SocialProvider[] } | null;
   toolchains: Record<Language, ToolchainInfo>;
   debuggers: Record<Language, boolean>;
   limits: { maxTimeLimitMs: number; maxTests: number; maxDebugSteps: number };

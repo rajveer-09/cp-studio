@@ -17,3 +17,4 @@ tests/
 __tests__/
 *.test.*
 *.spec.*
+*.tsbuildinfo

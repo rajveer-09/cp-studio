@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { DEFAULT_CODE, upgradeUntouchedTemplate } from './lib/templates';
 import type {
+  AccountState,
   BottomTab,
   ChatMessage,
   CodeFile,
@@ -18,6 +19,7 @@ import type {
   TestCase,
   TestResult,
   Theme,
+  TimerState,
 } from './types';
 
 /** Short random id. (crypto.randomUUID is unavailable on plain-http deployments.) */
@@ -54,6 +56,12 @@ export const DEFAULT_SETTINGS: Settings = {
   uiDarkness: 0,
   uiContrast: 0,
   layoutLocked: false,
+  headerHidden: false,
+  statementColors: 'theme',
+  statementLayout: 'enhanced',
+  leetcodeDriver: 'hidden',
+  timerAutoStart: false,
+  statementSize: 14,
 };
 
 interface PersistedState {
@@ -66,14 +74,16 @@ interface PersistedState {
   problem: string;
   /** Set when the problem was imported from a judge. */
   problemMeta: ProblemMeta | null;
+  /** The app's theme: 'github-dark' or 'github-light'. */
   theme: Theme;
-  /** Last dark and light theme used, so Alt+T switches between them. */
-  themePair: { dark: Theme; light: Theme };
+  /** The editor's theme for each app mode (any theme), so Alt+T switches both. */
+  editorThemes: { dark: Theme; light: Theme };
   settings: Settings;
   customTemplates: Template[];
   chat: ChatMessage[];
   assistantOpen: boolean;
   watches: Record<Language, string[]>;
+  timer: TimerState | null;
 }
 
 interface SessionState {
@@ -87,6 +97,12 @@ interface SessionState {
   bottomTab: BottomTab;
   serverConfig: ServerConfig | null;
   serverOnline: boolean;
+  /** Bumped by "Reset layout" to remount the resizable panels at their default sizes. */
+  layoutEpoch: number;
+  /** Only the editor, filling the screen. */
+  editorFocus: boolean;
+  /** Who is signed in (kept in sync with the session; never saved to localStorage). */
+  account: AccountState;
   dialog: DialogName | null;
   review: ReviewState | null;
   cursor: { line: number; column: number };
@@ -98,7 +114,7 @@ interface Actions {
   setLanguage: (language: Language) => void;
   /** Updates a file's code (the language's active tab when no id is given). */
   setCode: (language: Language, code: string, fileId?: string) => void;
-  addFile: (language: Language, file: { name: string; code: string }) => string;
+  addFile: (language: Language, file: { name: string; code: string; harness?: CodeFile['harness'] }) => string;
   renameFile: (language: Language, id: string, name: string) => void;
   closeFile: (language: Language, id: string) => void;
   selectFile: (language: Language, id: string) => void;
@@ -121,8 +137,41 @@ interface Actions {
 
 export type AppState = PersistedState & SessionState & Actions;
 
+/** The parts of the workspace that follow a signed-in user between devices. Theme and chat stay per device. */
+export const SYNCED_KEYS = ['language', 'files', 'activeFile', 'tests', 'activeTestId', 'problem', 'problemMeta', 'settings', 'customTemplates', 'watches'] as const;
+export type SyncedWorkspace = Pick<PersistedState, (typeof SYNCED_KEYS)[number]>;
+
+/** A new visitor's workspace (used after signing out, so the next person doesn't see your code). */
+export const freshWorkspace = (): SyncedWorkspace => ({
+  language: 'cpp',
+  files: defaultFiles(),
+  activeFile: { cpp: 'cpp-main', java: 'java-main', python: 'python-main' },
+  tests: [SAMPLE_TEST],
+  activeTestId: SAMPLE_TEST.id,
+  problem: '',
+  problemMeta: null,
+  settings: DEFAULT_SETTINGS,
+  customTemplates: [],
+  watches: { cpp: [], java: [], python: [] },
+});
+
 export const activeFileOf = (s: Pick<AppState, 'files' | 'activeFile'>, language: Language): CodeFile =>
   s.files[language].find((f) => f.id === s.activeFile[language]) ?? s.files[language][0];
+
+/**
+ * Before the app and editor themes were separate, one theme colored both. The app becomes GitHub dark or light;
+ * a theme the user had picked (not the old defaults, Ember and Daylight) stays on as the editor theme.
+ */
+function upgradeThemes(saved: Partial<PersistedState> & { themePair?: unknown }, editorThemes: PersistedState['editorThemes']) {
+  if (saved.editorThemes) return { editorThemes: { ...editorThemes, ...saved.editorThemes } };
+  if (!saved.theme) return {};
+  const dark = !['light', 'github-light', 'solarized-light', 'catppuccin-latte'].includes(saved.theme);
+  const picked = saved.theme !== 'dark' && saved.theme !== 'light';
+  return {
+    theme: dark ? 'github-dark' : 'github-light',
+    editorThemes: { ...editorThemes, ...(picked ? { [dark ? 'dark' : 'light']: saved.theme } : {}) },
+  };
+}
 
 const prefersLight = typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: light)').matches;
 
@@ -136,13 +185,14 @@ export const useStore = create<AppState>()(
       activeTestId: SAMPLE_TEST.id,
       problem: '',
       problemMeta: null,
-      theme: prefersLight ? 'light' : 'dark',
-      themePair: { dark: 'dark', light: 'light' },
+      theme: prefersLight ? 'github-light' : 'github-dark',
+      editorThemes: { dark: 'github-dark', light: 'github-light' },
       settings: DEFAULT_SETTINGS,
       customTemplates: [],
       chat: [],
       assistantOpen: true,
       watches: { cpp: [], java: [], python: [] },
+      timer: null,
 
       debug: null,
       debugStep: 0,
@@ -154,6 +204,9 @@ export const useStore = create<AppState>()(
       bottomTab: 'tests',
       serverConfig: null,
       serverOnline: true,
+      account: { status: 'loading', user: null },
+      layoutEpoch: 0,
+      editorFocus: false,
       dialog: null,
       review: null,
       cursor: { line: 1, column: 1 },
@@ -245,7 +298,7 @@ export const useStore = create<AppState>()(
         problem: s.problem,
         problemMeta: s.problemMeta,
         theme: s.theme,
-        themePair: s.themePair,
+        editorThemes: s.editorThemes,
         settings: s.settings,
         customTemplates: s.customTemplates,
         // A reply that was still streaming when the page closed can't be resumed.
@@ -254,6 +307,7 @@ export const useStore = create<AppState>()(
         ),
         assistantOpen: s.assistantOpen,
         watches: s.watches,
+        timer: s.timer,
       }),
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<PersistedState> & { code?: Record<Language, string> };
@@ -272,7 +326,7 @@ export const useStore = create<AppState>()(
           files: { ...current.files, ...files },
           activeFile: { ...current.activeFile, ...saved.activeFile },
           settings: { ...current.settings, ...saved.settings },
-          themePair: { ...current.themePair, ...saved.themePair },
+          ...upgradeThemes(saved, current.editorThemes),
           watches: { ...current.watches, ...saved.watches },
           tests: saved.tests?.length ? saved.tests : current.tests,
         };

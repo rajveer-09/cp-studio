@@ -263,11 +263,18 @@ export const THEMES: AppTheme[] = [
   },
 ];
 
-export const DEFAULT_DARK = 'dark';
-export const DEFAULT_LIGHT = 'light';
+/** The app itself comes in two themes (GitHub's); the editor can use any theme in THEMES. */
+export const APP_THEMES = ['github-dark', 'github-light'] as const;
+export const DEFAULT_DARK = 'github-dark';
+export const DEFAULT_LIGHT = 'github-light';
 
-export const themeById = (id: string) => THEMES.find((t) => t.id === id) ?? THEMES[0];
+export const themeById = (id: string) => THEMES.find((t) => t.id === id) ?? THEMES.find((t) => t.id === DEFAULT_DARK)!;
+/** The app theme for an id: one of the two, matching the id's darkness when it is an editor-only theme. */
+export const appThemeId = (id: string) => ((APP_THEMES as readonly string[]).includes(id) ? id : themeById(id).dark ? DEFAULT_DARK : DEFAULT_LIGHT);
 export const monacoThemeName = (id: string) => `cp-${themeById(id).id}`;
+
+/** The editor theme in use: the one chosen for the app's current mode (dark or light). */
+export const editorThemeOf = (s: { theme: string; editorThemes: { dark: string; light: string } }) => (themeById(s.theme).dark ? s.editorThemes.dark : s.editorThemes.light);
 
 const withAlpha = (hex: string, alpha: string) => (hex.length === 7 ? hex + alpha : hex);
 const bare = (hex: string) => hex.slice(1, 7);
@@ -337,15 +344,19 @@ const CSS_VARS: Record<keyof UiColors, string> = {
   success: '--success', danger: '--danger', warning: '--warning', info: '--info',
 };
 
+/** The app's theme: dark or light. The editor follows with the theme chosen for that mode. */
 export function selectTheme(id: string) {
-  const theme = themeById(id);
-  useStore.setState((s) => ({ theme: theme.id, themePair: { ...s.themePair, [theme.dark ? 'dark' : 'light']: theme.id } }));
+  useStore.setState({ theme: appThemeId(id) });
 }
 
-/** Switches between the last dark and the last light theme used. */
+/** The editor's theme, remembered for the app's current mode. */
+export function selectEditorTheme(id: string) {
+  const theme = themeById(id);
+  useStore.setState((s) => ({ editorThemes: { ...s.editorThemes, [themeById(s.theme).dark ? 'dark' : 'light']: theme.id } }));
+}
+
 export function toggleDarkLight() {
-  const { theme, themePair } = useStore.getState();
-  selectTheme(themeById(theme).dark ? themePair.light : themePair.dark);
+  selectTheme(themeById(useStore.getState().theme).dark ? DEFAULT_LIGHT : DEFAULT_DARK);
 }
 
 /** User adjustments on top of any theme, each from -100 to 100 (0 = as designed). */
@@ -400,22 +411,42 @@ function adjustTheme(t: AppTheme, { darkness, contrast }: ThemeAdjust): AppTheme
   return { ...t, ui, editor, syntax };
 }
 
-/** Applies a theme (with the user's adjustments) to the page and the editor, and caches it for the next first paint. */
-export function applyTheme(id: string, adjust: ThemeAdjust = { darkness: 0, contrast: 0 }) {
-  const theme = adjustTheme(themeById(id), adjust);
-  defineMonacoTheme(theme);
-  const vars: Record<string, string> = Object.fromEntries(
-    (Object.keys(CSS_VARS) as (keyof UiColors)[]).map((key) => [CSS_VARS[key], theme.ui[key]]),
-  );
-  vars['--shadow'] = theme.dark ? '0 16px 50px rgb(0 0 0 / 0.55)' : '0 12px 40px rgb(15 20 30 / 0.14)';
+const cssVarsOf = (t: AppTheme): Record<string, string> => ({
+  ...Object.fromEntries((Object.keys(CSS_VARS) as (keyof UiColors)[]).map((key) => [CSS_VARS[key], t.ui[key]])),
+  '--shadow': t.dark ? '0 16px 50px rgb(0 0 0 / 0.55)' : '0 12px 40px rgb(15 20 30 / 0.14)',
+});
+
+/** The IDE area (editor and test panel, class "ide-theme") wears the editor theme: its own copy of the color variables. */
+export const ideThemeCss = (vars: Record<string, string>, dark: boolean) =>
+  `.ide-theme{${Object.entries(vars)
+    .map(([name, value]) => `${name}:${value};`)
+    .join('')}color-scheme:${dark ? 'dark' : 'light'};}`;
+
+/**
+ * Applies the app theme as designed to the page, and the editor theme (with the user's darkness and contrast) to
+ * the IDE area: the code editor and the test case panel. Both are cached for the next first paint.
+ */
+export function applyTheme(id: string, editorId: string, adjust: ThemeAdjust = { darkness: 0, contrast: 0 }) {
+  const theme = themeById(appThemeId(id));
+  const editorTheme = adjustTheme(themeById(editorId), adjust);
+  defineMonacoTheme(editorTheme);
+  const vars = cssVarsOf(theme);
+  const ide = ideThemeCss(cssVarsOf(editorTheme), editorTheme.dark);
 
   const root = document.documentElement;
   root.classList.toggle('dark', theme.dark);
   root.style.colorScheme = theme.dark ? 'dark' : 'light';
   for (const [name, value] of Object.entries(vars)) root.style.setProperty(name, value);
-  monaco.editor.setTheme(`cp-${theme.id}`);
+  let style = document.getElementById('ide-theme') as HTMLStyleElement | null;
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'ide-theme';
+    document.head.append(style);
+  }
+  style.textContent = ide;
+  monaco.editor.setTheme(`cp-${editorTheme.id}`);
   try {
-    localStorage.setItem('cp-studio-theme', JSON.stringify({ dark: theme.dark, vars }));
+    localStorage.setItem('cp-studio-theme', JSON.stringify({ dark: theme.dark, vars, ide }));
   } catch {
     // The theme still applies; only the next load's first paint falls back to the default.
   }

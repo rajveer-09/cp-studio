@@ -140,12 +140,15 @@ function Lightbox({ image, onClose }: { image: { src: string; alt: string } | nu
   );
 }
 
-/** A problem statement: Markdown with LaTeX math typeset by KaTeX, as on the judge's site. Loaded on demand. */
-export default function Statement({ content }: { content: string }) {
+/**
+ * A problem statement: Markdown with LaTeX math typeset by KaTeX, as on the judge's site. Loaded on demand.
+ * `enhanced` restyles the same content for reading (LeetCode-like headings, examples and code pills).
+ */
+export default function Statement({ content, enhanced = false }: { content: string; enhanced?: boolean }) {
   const [zoomed, setZoomed] = useState<{ src: string; alt: string } | null>(null);
   return (
     <ZoomContext.Provider value={setZoomed}>
-      <div className="statement">
+      <div className={enhanced ? 'statement statement-enhanced' : 'statement'}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath, remarkCenter]}
           rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}

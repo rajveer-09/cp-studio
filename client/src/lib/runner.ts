@@ -5,6 +5,8 @@ import { api, type RunResponse } from './api';
 import { parseDiagnostics } from './diagnostics';
 import { editorBridge } from './editor';
 import { VERDICT_META } from './languages';
+import { programOf, toTabLines } from './harness';
+import { recordActivity, recordProblem } from './problems';
 import { runSummary, testVerdict } from './verdict';
 
 export interface RunSummary {
@@ -41,20 +43,29 @@ export async function runTests(mode: 'current' | 'all'): Promise<RunSummary | nu
   const tests = mode === 'all' ? state.tests : state.tests.filter((t) => t.id === state.activeTestId);
   const fileId = activeFileOf(state, language).id;
   const code = editorBridge.getCode(language, fileId);
+  // With a hidden LeetCode driver, the program is the driver around the tab's code.
+  const program = programOf(language, fileId);
   if (!code.trim()) {
     toast.error('Write some code first.');
     return null;
   }
 
   useStore.setState({ running: mode, runningIds: tests.map((t) => t.id) });
+  recordActivity('run');
   try {
-    const response = await api.run({
+    const ran = await api.run({
       language,
-      code,
+      code: program.code,
       cppStandard: settings.cppStandard,
       timeLimitMs: settings.timeLimitMs,
       tests: tests.map((t) => ({ id: t.id, input: t.input })),
     });
+    // Errors point at the tab's own lines (and say so when they are in the hidden driver).
+    const response = {
+      ...ran,
+      compile: { ...ran.compile, output: toTabLines(ran.compile.output, program) },
+      results: ran.results.map((r) => ({ ...r, stderr: toTabLines(r.stderr, program) })),
+    };
 
     const results = { ...useStore.getState().results };
     for (const test of tests) {
@@ -88,7 +99,10 @@ export async function runTests(mode: 'current' | 'all'): Promise<RunSummary | nu
 
     if (!response.compile.ok) toast.error('Compilation failed', { description: 'See the error in the output panel.' });
     else if (mode === 'all') {
-      if (passed === total) toast.success(total === 1 ? 'Test passed' : `All ${total} tests passed`);
+      if (passed === total) {
+        toast.success(total === 1 ? 'Test passed' : `All ${total} tests passed`);
+        if (total > 0) recordProblem('solved');
+      }
       else toast.error(`${passed}/${total} tests passed`, { description: `First failure: Test ${failing[0].index} (${VERDICT_META[failing[0].verdict].label})` });
     }
 

@@ -1,7 +1,9 @@
 import { toast } from 'sonner';
 import { activeFileOf, MAX_FILES, uid, useStore, type AppState } from '../store';
 import type { ImportedProblem, Language, Platform, ProblemMeta } from '../types';
-import { api } from './api';
+import { api, type ActivityEvent, type ProblemEvent, type ProblemSnapshot } from './api';
+import { joinHarness, splitHarness, type Harness } from './harness';
+import { requireAi } from './auth';
 import { editorBridge } from './editor';
 import { LANGUAGE_META, LANGUAGES } from './languages';
 import { copyText } from './platform';
@@ -12,6 +14,25 @@ export const PLATFORM_META: Record<Platform, { label: string; placeholder: strin
   codechef: { label: 'CodeChef', placeholder: 'Problem code, e.g. FLOW001, or paste its URL' },
   leetcode: { label: 'LeetCode', placeholder: 'Number or name, e.g. 1 or two-sum, or paste its URL' },
   atcoder: { label: 'AtCoder', placeholder: 'Task, e.g. abc300_a, or paste its URL' },
+};
+
+/** Codeforces tags are lowercase ("dp", "dfs and similar"); LeetCode topics come titled already. */
+const ACRONYMS: Record<string, string> = { dp: 'DP', dfs: 'DFS', dsu: 'DSU', fft: 'FFT', '2-sat': '2-SAT', '*special': 'Special' };
+export function topicName(tag: string): string {
+  if (ACRONYMS[tag]) return ACRONYMS[tag];
+  const name = tag
+    .split(' ')
+    .map((word) => ACRONYMS[word] ?? word)
+    .join(' ');
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/** Each judge's dot color in lists and charts. */
+export const PLATFORM_COLORS: Record<Platform, string> = {
+  codeforces: '#3b82f6',
+  leetcode: '#ffa116',
+  codechef: '#b07c5b',
+  atcoder: '#8b8b96',
 };
 
 export const PLATFORM_ORDER: Platform[] = ['codeforces', 'codechef', 'leetcode', 'atcoder'];
@@ -35,7 +56,7 @@ const TIME_LIMITS = [1000, 2000, 3000, 5000, 10_000];
 const DECIMAL = /(^|\s)[+-]?\d+\.\d+(\s|$)/;
 
 /** Loads an imported problem: statement, sample tests and its time limit. One click on Undo restores everything. */
-export function applyImported(problem: ImportedProblem) {
+export function applyImported(problem: ImportedProblem, { reopened = false }: { reopened?: boolean } = {}) {
   const state = useStore.getState();
   const before: Partial<AppState> = {
     tests: state.tests,
@@ -75,16 +96,23 @@ export function applyImported(problem: ImportedProblem) {
     settings,
   });
   const opened = openProblemTabs(problem);
+  recordProblem('opened');
+  if (!reopened && useStore.getState().settings.timerAutoStart) {
+    useStore.setState({ timer: { mode: 'stopwatch', durationMs: 0, startedAt: Date.now(), elapsedMs: 0 } });
+  }
   if (opened) notes.unshift(`tab ${problemTabName(problem, state.language)}`);
-  toast.success(`Imported “${problem.title}”`, {
+  toast.success(`${reopened ? 'Reopened' : 'Imported'} “${problem.title}”`, {
     description: notes.join(' · '),
     action: { label: 'Undo', onClick: () => useStore.setState(before) },
   });
-  if (problem.functionBased) {
+  if (problem.functionBased && !reopened) {
     const runnable = Boolean(problem.programs && Object.keys(problem.programs).length);
     if (opened && runnable) {
       toast.info('Write your solution in the Solution class', {
-        description: 'The code that reads each test and prints the answer is folded above and below it.',
+        description:
+          useStore.getState().settings.leetcodeDriver === 'shown'
+            ? 'The code that reads each test and prints the answer is folded above and below it.'
+            : 'Like on LeetCode, only the class is shown: the code that reads each test and prints the answer is added when it runs.',
         duration: 7000,
       });
     } else {
@@ -94,6 +122,37 @@ export function applyImported(problem: ImportedProblem) {
       });
     }
   }
+}
+
+/**
+ * Adds the loaded problem to a signed-in user's history: opened (with the statement and tests, to reopen it later),
+ * solved (all sample tests passed) or submitted, the last two with the code that did it. Best effort, in the background.
+ */
+export function recordActivity(kind: ActivityEvent['kind']) {
+  const state = useStore.getState();
+  if (state.account.status !== 'signedIn' || !state.serverConfig?.accounts) return;
+  const meta = state.problemMeta;
+  api.me
+    .activity({ kind, language: state.language, ...(meta?.id ? { platform: meta.platform, problemId: meta.id } : {}) })
+    .catch(() => {});
+}
+
+export function recordProblem(event: ProblemEvent['event']) {
+  if (event === 'solved') recordActivity('solved');
+  if (event === 'submitted') recordActivity('submit');
+  const state = useStore.getState();
+  const meta = state.problemMeta;
+  if (state.account.status !== 'signedIn' || !state.serverConfig?.accounts || !meta?.id) return;
+  const { language } = state;
+  const tests = state.tests.map(({ input, expected }) => ({ input, expected }));
+  const tab = state.files[language].find((f) => f.name === problemTabName(meta, language));
+  const snapshot: ProblemSnapshot =
+    event === 'opened'
+      ? { meta, statement: state.problem, tests }
+      : { tests, code: { [language]: editorBridge.getCode(language, tab?.id) } };
+  api.me
+    .problemEvent({ platform: meta.platform, id: meta.id, title: meta.title, url: meta.url, event, language, snapshot })
+    .catch(() => {});
 }
 
 const EXTENSION: Record<Language, string> = { cpp: 'cpp', java: 'java', python: 'py' };
@@ -123,15 +182,20 @@ export function openProblemTabs(
     if (!code) continue;
     const state = useStore.getState();
     const name = problemTabName(meta, language);
+    // LeetCode-style: only the Solution class in the tab, the driver kept aside (unless the user chose to see it).
+    const split = state.settings.leetcodeDriver !== 'shown' ? splitHarness(code) : null;
     const existing = state.files[language].find((f) => f.name === name);
     if (existing) {
       state.selectFile(language, existing.id);
       if (overwrite) {
-        editorBridge.setCode(language, code, existing.id);
-        editorBridge.foldHarness(language, existing.id);
+        useStore.setState((s) => ({
+          files: { ...s.files, [language]: s.files[language].map((f) => (f.id === existing.id ? { ...f, harness: split?.harness } : f)) },
+        }));
+        editorBridge.setCode(language, split?.body ?? code, existing.id);
+        if (!split) editorBridge.foldHarness(language, existing.id);
       }
     } else if (state.files[language].length < MAX_FILES) {
-      state.addFile(language, { name, code });
+      state.addFile(language, split ? { name, code: split.body, harness: split.harness } : { name, code });
     } else {
       toast.error(`You have ${MAX_FILES} ${LANGUAGE_META[language].label} tabs open. Close one to open a tab for this problem.`);
       continue;
@@ -139,6 +203,32 @@ export function openProblemTabs(
     opened++;
   }
   return opened;
+}
+
+/** Saved code as this tab needs it: without the driver if the tab hides it, with it if the tab shows it. */
+function fitToTab(code: string, tab: { harness?: Harness; code: string }): string {
+  const split = splitHarness(code);
+  if (tab.harness) return split ? split.body : code;
+  const current = splitHarness(tab.code);
+  return !split && current ? joinHarness(code, current.harness) : code;
+}
+
+/** Opens a problem from the history with the tests and the code saved for it, in each language that has some. */
+export async function reopenProblem(platform: Platform, id: string): Promise<void> {
+  const snapshot = await api.me.problem(platform, id);
+  if (!snapshot.meta) throw new Error('This problem has nothing saved to reopen.');
+  const { samples, ...meta } = snapshot.meta;
+  const saved = Object.entries(snapshot.code ?? {}).filter(([, code]) => code?.trim()) as [Language, string][];
+  const state = useStore.getState();
+  if (saved.length && !saved.some(([language]) => language === state.language)) state.setLanguage(saved[0][0]);
+
+  applyImported({ ...meta, statement: snapshot.statement ?? '', tests: snapshot.tests?.length ? snapshot.tests : (samples ?? []) }, { reopened: true });
+  for (const [language, code] of saved) {
+    const tab = useStore.getState().files[language].find((f) => f.name === problemTabName(meta, language));
+    if (tab) editorBridge.setCode(language, fitToTab(code, tab), tab.id);
+  }
+  // The judge's own samples, for "Use as test cases", even when the saved tests include your own.
+  useStore.setState((s) => ({ bottomTab: 'problem', problemMeta: s.problemMeta && samples ? { ...s.problemMeta, samples } : s.problemMeta }));
 }
 
 export async function importProblem(platform: Platform, ref: string): Promise<boolean> {
@@ -251,25 +341,50 @@ export function codeForSubmission(code: string): string {
   return `${kept.join('\n').trim()}\n`;
 }
 
-/** Copies the active tab's code (ready to paste) and opens the judge's submit page. */
+/** The userscript that fills code in on the judges' sites (served with this site's address in it). */
+export const SUBMIT_HELPER_URL = '/api/helper/cp-studio.user.js';
+
+/** The helper marks CP Studio's page when it is installed: its version, or null. */
+export const submitHelperVersion = () => document.documentElement.getAttribute('data-cp-studio-helper');
+
+/**
+ * Opens the judge's submit page and copies the active tab's code. With the helper installed, the code also
+ * travels in the link's #fragment (never sent to a server) and the helper puts it in the judge's editor.
+ */
 export async function openSubmission(meta: Pick<ProblemMeta, 'platform' | 'url'>) {
   const { language } = useStore.getState();
   const code = codeForSubmission(editorBridge.getCode(language));
   const site = PLATFORM_META[meta.platform].label;
+  const label = LANGUAGE_META[language].label;
+  const helper = Boolean(submitHelperVersion());
+  const url = submitUrl(meta).replace(/#.*$/, '');
+  recordProblem('submitted');
   // Opened first, while the click still counts as a user action (popup blockers allow that).
-  window.open(submitUrl(meta), '_blank', 'noopener');
+  window.open(helper ? `${url}#cp-studio=${encodeURIComponent(JSON.stringify({ language, code }))}` : url, '_blank', 'noopener');
+  let copied = true;
   try {
     await copyText(code);
-    toast.success(`Your ${LANGUAGE_META[language].label} code is copied`, {
-      description: `Paste it on ${site} (Ctrl+V)${meta.platform === 'codeforces' || meta.platform === 'atcoder' ? ' and pick the language there' : ''}.`,
-    });
   } catch {
-    toast.info(`Opened ${site}`, { description: 'Copy your code from the editor (Ctrl+A, Ctrl+C) and paste it there.' });
+    copied = false;
+  }
+  if (helper) {
+    toast.success(`Sending your ${label} code to ${site}`, {
+      description: `The helper puts it in the editor and picks the language.${copied ? ' It is on your clipboard too.' : ''}`,
+    });
+  } else {
+    const autoFill = { label: 'Auto-fill', onClick: () => useStore.getState().openDialog('submitHelper') };
+    if (copied) {
+      toast.success(`Your ${label} code is copied`, {
+        description: `Paste it on ${site} (Ctrl+V)${meta.platform === 'codeforces' || meta.platform === 'atcoder' ? ' and pick the language there' : ''}.`,
+        action: autoFill,
+      });
+    } else toast.info(`Opened ${site}`, { description: 'Copy your code from the editor (Ctrl+A, Ctrl+C) and paste it there.', action: autoFill });
   }
 }
 
 /** LeetCode: asks the AI for the starter code plus a main() that runs one example from stdin. */
 export async function requestLeetCodeDriver(): Promise<void> {
+  if (!requireAi()) return;
   const state = useStore.getState();
   const { language, problemMeta, tests } = state;
   const fileId = activeFileOf(state, language).id;
@@ -299,8 +414,11 @@ export async function requestLeetCodeDriver(): Promise<void> {
 export function problemForAi(state: AppState): string {
   const meta = state.problemMeta;
   if (!meta) return state.problem;
-  const note = meta.functionBased
-    ? '\n\nNote: this is a LeetCode problem. In this editor the program reads one test case from stdin (each argument on its own line, in LeetCode format) and prints the result in LeetCode format. Code inside the "LeetCode harness" regions does that: keep it unchanged and only change the Solution class.'
-    : '';
+  const hiddenDriver = Boolean(activeFileOf(state, state.language).harness);
+  const note = !meta.functionBased
+    ? ''
+    : hiddenDriver
+      ? '\n\nNote: this is a LeetCode problem. Like on LeetCode, the code is only the Solution class: CP Studio adds the code that reads a test case and prints the answer when it runs. Write and change only the Solution class, with no main().'
+      : '\n\nNote: this is a LeetCode problem. In this editor the program reads one test case from stdin (each argument on its own line, in LeetCode format) and prints the result in LeetCode format. Code inside the "LeetCode harness" regions does that: keep it unchanged and only change the Solution class.';
   return `${meta.title} (${PLATFORM_META[meta.platform].label}: ${meta.url})\n\n${state.problem}${note}`;
 }

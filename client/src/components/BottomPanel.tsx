@@ -3,6 +3,7 @@ import {
   Bug,
   Copy,
   Eraser,
+  LayoutTemplate,
   ListChecks,
   Loader2,
   Minus,
@@ -23,9 +24,10 @@ import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'rea
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useElementWidth } from '../hooks';
 import { sendToAssistant } from '../lib/assistant';
+import { requireAi } from '../lib/auth';
 import type { Comparison } from '../lib/compare';
 import { isFailing, LANGUAGE_META, TONE_BG, TONE_TEXT, VERDICT_META } from '../lib/languages';
-import { changeIoFontSize, IO_FONT, toggleTestPanelPosition } from '../lib/layout';
+import { changeIoFontSize, IO_FONT, resetLayout, toggleTestPanelPosition } from '../lib/layout';
 import { copyText } from '../lib/platform';
 import { runTests } from '../lib/runner';
 import { clearAllTests, clearResults, restoreSamples } from '../lib/testcases';
@@ -352,6 +354,11 @@ function TestsMenu({ activeId, index }: { activeId: string; index: number }) {
             Delete all test cases
           </DropdownMenu.Item>
           <DropdownMenu.Separator className="my-1.5 h-px bg-line" />
+          <DropdownMenu.Item onSelect={resetLayout} className={menuItem}>
+            <LayoutTemplate />
+            Reset panel layout
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator className="my-1.5 h-px bg-line" />
           <TextSizeRow />
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
@@ -507,6 +514,7 @@ function TestPanel() {
   const columnsRef = useRef<HTMLDivElement>(null);
   const width = useElementWidth(columnsRef);
   const sideBySide = width === 0 || width >= 560;
+  const epoch = useStore((s) => s.layoutEpoch);
   useWheelTextSize(columnsRef);
 
   // Wrong answers open in the diff view; the user's choice sticks until the next result.
@@ -541,7 +549,7 @@ function TestPanel() {
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => useStore.getState().openDialog('generateTests')}
+            onClick={() => requireAi() && useStore.getState().openDialog('generateTests')}
             disabled={!aiEnabled}
             className="shrink-0 [&_svg]:text-accent"
           >
@@ -556,7 +564,7 @@ function TestPanel() {
 
       <div ref={columnsRef} className="min-h-0 flex-1" style={{ fontSize }}>
         <PanelGroup
-          key={sideBySide ? 'columns' : 'rows'}
+          key={`${epoch}-${sideBySide ? 'columns' : 'rows'}`}
           direction={sideBySide ? 'horizontal' : 'vertical'}
           autoSaveId={sideBySide ? 'cp-io-columns' : 'cp-io-rows'}
         >

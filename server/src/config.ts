@@ -54,6 +54,8 @@ export const config = {
   /** Optional shared password. When set, every API call must send it in the `x-access-key` header. */
   accessKey: text('ACCESS_KEY'),
   trustProxy: text('TRUST_PROXY'),
+  /** The site's public address, if it can't be worked out from requests (e.g. https://cp-studio.onrender.com). */
+  publicUrl: text('PUBLIC_URL'),
   clientDist: path.resolve(serverRoot, '../client/dist'),
 
   gemini: {
@@ -74,12 +76,20 @@ export const config = {
     cxxPchDir: text('CXX_PCH_DIR'),
   },
 
-  /** A GitHub OAuth App, for "Save to GitHub" (optional). Users sign in with their own accounts. */
+  /** Postgres (e.g. Neon). Accounts are off without it. */
+  databaseUrl: text('DATABASE_URL'),
+
+  auth: {
+    /** Signs the sign-in cookies; keep it secret and stable (changing it signs everyone out). */
+    secret: text('BETTER_AUTH_SECRET'),
+    /** "Continue with Google" (optional): an OAuth client from the Google Cloud console. */
+    google: { clientId: text('GOOGLE_CLIENT_ID'), clientSecret: text('GOOGLE_CLIENT_SECRET') },
+  },
+
+  /** A GitHub OAuth App, for "Save to GitHub" and "Continue with GitHub" (optional). */
   github: {
     clientId: text('GITHUB_CLIENT_ID'),
     clientSecret: text('GITHUB_CLIENT_SECRET'),
-    /** The site's public address, if it can't be worked out from requests (e.g. https://cp-studio.onrender.com). */
-    publicUrl: text('PUBLIC_URL'),
   },
 
   /** CPU cores allowed by the container (null: no limit found). */
@@ -110,3 +120,8 @@ export const config = {
 
 export const aiEnabled = config.gemini.apiKeys.length > 0;
 export const githubEnabled = Boolean(config.github.clientId && config.github.clientSecret);
+
+/** Where users reach this site, e.g. https://cp-studio.onrender.com (behind a proxy this needs TRUST_PROXY). */
+export function siteOrigin(req: { protocol: string; get(name: string): string | undefined }): string {
+  return (config.publicUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+}

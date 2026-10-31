@@ -22,6 +22,12 @@
           if (cached.dark) root.classList.add('dark');
           root.style.colorScheme = cached.dark ? 'dark' : 'light';
           for (var name in cached.vars) root.style.setProperty(name, cached.vars[name]);
+          if (cached.ide) {
+            var style = document.createElement('style');
+            style.id = 'ide-theme';
+            style.textContent = cached.ide;
+            document.head.appendChild(style);
+          }
         } else if (!matchMedia('(prefers-color-scheme: light)').matches) {
           root.classList.add('dark');
         }

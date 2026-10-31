@@ -1,13 +1,14 @@
 import { useEffect, useState, useSyncExternalStore, type RefObject } from 'react';
 import { toast } from 'sonner';
-import { api, getAccessKey, setUnauthorizedHandler } from './lib/api';
+import { api, getAccessKey, setSignInRequiredHandler, setUnauthorizedHandler } from './lib/api';
 import { focusAssistant } from './lib/assistant';
+import { promptSignIn, requireAi } from './lib/auth';
 import { startDebugging, stepBy } from './lib/debugger';
 import { editorBridge } from './lib/editor';
-import { toggleAssistant, toggleLayoutLock, toggleTestPanelPosition } from './lib/layout';
+import { toggleAssistant, toggleEditorFocus, toggleFullscreen, toggleHeader, toggleLayoutLock, toggleTestPanelPosition } from './lib/layout';
 import { isMac } from './lib/platform';
 import { runTests } from './lib/runner';
-import { applyTheme, toggleDarkLight } from './lib/themes';
+import { applyTheme, editorThemeOf, toggleDarkLight } from './lib/themes';
 import { useStore } from './store';
 import type { Language } from './types';
 
@@ -57,10 +58,13 @@ export function useShortcuts() {
           Digit3: switchTo('python'),
           KeyT: toggleDarkLight,
           KeyN: () => s.addTest(),
-          KeyG: s.serverConfig?.aiEnabled ? () => s.openDialog('generateTests') : undefined,
+          KeyG: s.serverConfig?.aiEnabled ? () => requireAi() && s.openDialog('generateTests') : undefined,
           KeyB: toggleAssistant,
           KeyL: toggleTestPanelPosition,
           KeyK: toggleLayoutLock,
+          KeyH: toggleHeader,
+          Enter: toggleFullscreen,
+          KeyZ: toggleEditorFocus,
           Period: debugging ? () => stepBy(1) : undefined,
           Comma: debugging ? () => stepBy(-1) : undefined,
           Slash: () => s.openDialog(s.dialog === 'shortcuts' ? null : 'shortcuts'),
@@ -79,9 +83,10 @@ export function useShortcuts() {
 
 export function useThemeSync() {
   const theme = useStore((s) => s.theme);
+  const editorTheme = useStore(editorThemeOf);
   const darkness = useStore((s) => s.settings.uiDarkness);
   const contrast = useStore((s) => s.settings.uiContrast);
-  useEffect(() => applyTheme(theme, { darkness, contrast }), [theme, darkness, contrast]);
+  useEffect(() => applyTheme(theme, editorTheme, { darkness, contrast }), [theme, editorTheme, darkness, contrast]);
 }
 
 export function useServerConfig() {
@@ -89,6 +94,11 @@ export function useServerConfig() {
     let cancelled = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
     setUnauthorizedHandler(() => useStore.getState().openDialog('access'));
+    // Signed out, or the session ran out, while using the AI.
+    setSignInRequiredHandler((message) => {
+      useStore.setState({ account: { status: 'signedOut', user: null } });
+      promptSignIn(message);
+    });
 
     const load = async () => {
       try {

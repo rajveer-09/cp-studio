@@ -7,14 +7,14 @@ import { acceptReview, rejectReview } from '../lib/assistant';
 import { normalizeLines } from '../lib/compare';
 import { editorBridge } from '../lib/editor';
 import { LANGUAGE_META } from '../lib/languages';
-import { monacoThemeName } from '../lib/themes';
+import { editorThemeOf, monacoThemeName } from '../lib/themes';
 import type { monaco } from '../lib/monaco';
 import { useStore } from '../store';
 import { Button, Kbd, Segmented } from './ui';
 
 export function FixReviewDialog() {
   const review = useStore((s) => s.review);
-  const theme = useStore((s) => s.theme);
+  const editorTheme = useStore(editorThemeOf);
   const fontSize = useStore((s) => s.settings.fontSize);
   const [layout, setLayout] = useState<'split' | 'inline'>('split');
   const diffRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null);
@@ -97,7 +97,7 @@ export function FixReviewDialog() {
                   original={current}
                   modified={review.code}
                   language={LANGUAGE_META[review.language].monaco}
-                  theme={monacoThemeName(theme)}
+                  theme={monacoThemeName(editorTheme)}
                   keepCurrentOriginalModel
                   keepCurrentModifiedModel
                   onMount={(editor) => {

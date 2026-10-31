@@ -28,9 +28,10 @@ Run code against test cases like an online judge, step through it with a debugge
 
   You get the statement, with math typeset (KaTeX) as on the judge's site, plus the sample tests and the time limit. An import can be undone.
 - **Submit on Codeforces / CodeChef / LeetCode / AtCoder** copies your code (for LeetCode, just the `Solution` class) and opens the judge's submit page with the problem selected.
+- **Auto-fill on the judge:** with the optional CP Studio helper (a userscript for Tampermonkey or Violentmonkey, installed once from **Auto-fill** next to the Submit button), the judge's page opens with your code already in its editor and the language picked. It keeps the compiler you chose there before (otherwise the newest G++, Java 21, or PyPy 3). You still press Submit yourself. The code travels in the link's `#fragment`, which never reaches a server, and the helper only accepts it from CP Studio.
 - The sample tests appear under the statement as **Input / Output** cards with copy buttons. They are also loaded as your test cases, and **Use as test cases** puts them back after you've changed them.
 - **Codeforces** blocks automated downloads, so a one-click **Send to CP Studio** bookmark reads the problem from the page you have open.
-- **LeetCode** problems are methods rather than programs. Importing one opens a tab (e.g. `two-sum.cpp`) in each language, with the `Solution` class ready to fill in. The code that reads each test and prints the answer in LeetCode's format sits in collapsed blocks above and below it, built from LeetCode's own type information (no AI needed). Design problems such as `LRUCache` get an AI-written `main()` via **Starter + main()**.
+- **LeetCode** problems are methods rather than programs. Importing one opens a tab (e.g. `two-sum.cpp`) in each language holding only the `Solution` class, like on LeetCode (and the AI sees just that). The driver that reads each test and prints the answer in LeetCode's format is added when the code runs or is debugged, and errors still point at the right lines; the Problem settings can show it in the tab instead, built from LeetCode's own type information (no AI needed). Design problems such as `LRUCache` get an AI-written `main()` via **Starter + main()**.
 
 ### Run like a judge
 - **Multiple test cases**, each with an input, an expected output and your output, plus verdicts: **Accepted**, **Wrong Answer**, **Time Limit Exceeded**, **Runtime Error** and **Compilation Error**.
@@ -45,6 +46,16 @@ Run code against test cases like an online judge, step through it with a debugge
 - **Clear wrong answers.** The checker tells you exactly what's wrong, e.g. `Line 2: expected "9", found "3"`, and a **Diff** view highlights the differing words.
 - **Readable crashes.** Runtime errors are explained ("Segmentation fault", "Integer division by zero"). Compiler errors become clickable links and squiggles in the editor.
 - **Fast re-runs.** Code is compiled once per change, so re-running tests is instant.
+
+### Accounts
+- **Sign up** with email and password, or **Continue with Google / GitHub** when those are configured. Sessions are httpOnly cookies, stored in Postgres (e.g. Neon) by [Better Auth](https://www.better-auth.com/).
+- The editor, running and debugging work without an account. **The AI assistant needs one**, which keeps the shared Gemini quota for people who signed up.
+- Accounts turn on when `DATABASE_URL` is set; the tables are created on first start.
+- **Your work follows you:** signed in, your tabs, tests, saved templates and settings are saved to your account as you type and load on any device. Code written before signing up moves into the new account. Signing out leaves this browser with a fresh workspace.
+- **Dashboard** (account menu): your **coding streak** (days in a row you ran code) and **solving streak** (days you solved a problem), with the longest of each; problems solved; **practice sessions** (coding with no problem loaded); a year-long activity heatmap; solved and opened per judge; runs per language; recent problems. Days follow your own time zone.
+- **Judge profiles** (on the dashboard): link your Codeforces, LeetCode, CodeChef and AtCoder usernames and the judges' accepted solutions count too: in **Problems solved**, the heatmap and your streaks, with ratings, ranks and LeetCode's Easy / Medium / Hard split. Only public profile data is read: Codeforces through its official API, AtCoder through AtCoder Problems, LeetCode through its public profile, CodeChef from the profile page (totals only). Profiles refresh every 6 hours when you open the dashboard, or with **Sync now**. Problems the judge accepted show as **Accepted** in Problems.
+- **Stats** (account menu): a **rating graph** for each linked judge (every rated contest, the peak marked, hover for the contest), current and best rating, Codeforces rank and LeetCode's global standing; LeetCode's **Easy / Medium / Hard** donut; Codeforces problems solved **per problem rating**; and problems solved **per topic** (Codeforces tags, LeetCode topics).
+- **Problems** (account menu): every problem you opened, with **Solved** (all sample tests passed), **Attempted** and **Submitted**, the judge, languages and when. Search, filter, and click one to reopen it with your tests and the code you wrote.
 
 ### AI assistant (Google Gemini)
 - It sees your code, your selection, the problem statement, your test cases, their outputs and any errors.
@@ -70,12 +81,13 @@ Run code against test cases like an online judge, step through it with a debugge
 
 ### Editor
 - The **Monaco** editor (the editor behind VS Code).
-- **14 themes**, each coloring both the app and the code:
-  - **Dark:** Ember (the default: graphite with an orange accent and Monokai-style code colors), Midnight, One Dark, Dracula, Tokyo Night, Nord, Monokai, Gruvbox, Catppuccin Mocha, GitHub Dark.
-  - **Light:** Daylight, GitHub Light, Solarized Light, Catppuccin Latte.
+- **Themes, set separately for the app and the editor:**
+  - **App:** GitHub Dark (the default) or GitHub Light.
+  - **Editor** (the code editor and the test case panel): any of 14 themes. Dark: GitHub Dark, Ember, Midnight, One Dark, Dracula, Tokyo Night, Nord, Monokai, Gruvbox, Catppuccin Mocha. Light: GitHub Light, Daylight, Solarized Light, Catppuccin Latte. Dark and light mode each remember their own editor theme.
 
-  `Alt+T` switches between your favourite dark and light theme.
-- **Easy on the eyes:** Darkness and Contrast sliders (theme menu or Settings) adjust any theme: the panels, navigation and editor together.
+  `Alt+T` switches the app between dark and light, and the editor to the theme you chose for that mode.
+- **Easy on the eyes:** Darkness and Contrast sliders (Settings) adjust the editor and test case panel; the rest of the app keeps GitHub's colors.
+- **Where:** the app's Dark / Light is in your profile menu (and Settings, and `Alt+T`); **Settings** (the gear in the editor's header) picks the editor theme.
 - **Tabs:** keep several files per language, e.g. a solution and a brute force.
   - **+** adds a tab from any template, or duplicates the current one.
   - Double-click a tab to rename it. Closing a tab can be undone.
@@ -86,6 +98,9 @@ Run code against test cases like an online judge, step through it with a debugge
 - **Download** the active tab as a file, or all your tabs as a `.zip`.
 - **Save to GitHub**: sign in with your own GitHub account and commit solutions to your repository (e.g. `codeforces/1904A.cpp`); the repository is created on first save.
 - Resizable panels, with the test panel **below or beside** the editor. Your work is saved in the browser automatically.
+- **Timer** in the top bar: a stopwatch, or a countdown (15 min to 2 h, or any length) that warns when 5 minutes are left, beeps when time is up and then counts overtime. It can start by itself when you import a problem.
+- **Full screen** (`Alt+Enter`), and **editor only** (`Alt+Z` or the button above the editor): just the code, filling the screen; Esc brings the rest back.
+- **Reset layout** (test panel ⋯ menu or Settings → Layout) puts panel sizes, the test panel and the top bar back to their defaults.
 - **Lock layout** (`Alt+K` or the lock button) so panels can't be resized, moved or hidden by accident while you code.
 - **Keyboard shortcuts** for everything.
 
@@ -151,7 +166,10 @@ Get a free Gemini API key from [Google AI Studio](https://aistudio.google.com/ap
 | `Alt+L` | Move the test panel right / bottom |
 | `Alt+B` | Show / hide the AI assistant |
 | `Alt+K` | Lock / unlock the layout |
-| `Alt+T` | Switch between your dark and light theme |
+| `Alt+H` | Hide / show the top bar |
+| `Alt+Enter` | Full screen |
+| `Alt+Z` | Editor only, full screen |
+| `Alt+T` | Switch the app between dark and light |
 | `Alt+/` | Show all shortcuts |
 
 On macOS, use `⌘` instead of `Ctrl`.
@@ -165,8 +183,12 @@ Set these in `server/.env` locally, or as environment variables when deploying.
 | `GEMINI_API_KEYS` | (empty) | One or more Gemini API keys, comma-separated. Turns on the AI assistant |
 | `GEMINI_MODEL` | `gemini-3.6-flash` | Main Gemini model |
 | `GEMINI_FALLBACK_MODELS` | `gemini-3.5-flash-lite,gemini-3.1-flash-lite` | Used in order when every key is out of quota on the main model |
+| `DATABASE_URL` | (empty) | Postgres connection string (e.g. Neon). Turns on accounts |
+| `BETTER_AUTH_SECRET` | (empty) | Signs session cookies. Required for accounts in production; changing it signs everyone out |
+| `GOOGLE_CLIENT_ID` `GOOGLE_CLIENT_SECRET` | (empty) | **Continue with Google**. Redirect URI: `https://YOUR-SITE/api/auth/callback/google` |
+| `GITHUB_CLIENT_ID` `GITHUB_CLIENT_SECRET` | (empty) | One GitHub OAuth App for **Continue with GitHub** and **Save to GitHub**. Callback URL: `https://YOUR-SITE/api/` |
 | `ACCESS_KEY` | (empty) | Optional shared password that visitors enter once |
-| `GITHUB_CLIENT_ID` `GITHUB_CLIENT_SECRET` | (empty) | A GitHub OAuth App for **Save to GitHub**; each user signs in with their own account |
+| `PUBLIC_URL` | (from requests) | The site's address, used in sign-in callbacks and the submit helper. Only needed behind unusual proxies |
 | `PORT` | `3001` | HTTP port |
 | `TRUST_PROXY` | `1` in Docker | Set behind a reverse proxy, so rate limits see real IPs |
 | `CXX` `JAVAC` `JAVA` `PYTHON` `GDB` | `g++` `javac` `java` `python3` `gdb` | Toolchain commands |
@@ -185,7 +207,7 @@ docker run -p 3001:3001 -e GEMINI_API_KEYS=key1,key2 -e ACCESS_KEY=choose-a-pass
 **On Render:**
 1. Create a **Web Service** from this repo.
 2. Choose the **Docker** runtime.
-3. Add `GEMINI_API_KEYS`, `GEMINI_MODEL` and `ACCESS_KEY` as environment variables.
+3. Add `GEMINI_API_KEYS`, `GEMINI_MODEL`, `DATABASE_URL` and `BETTER_AUTH_SECRET` as environment variables (plus the Google / GitHub ones for those sign-in buttons).
 
 The port is picked up automatically. Render's free instance is small (about 0.1 CPU, 512 MB RAM) and sleeps when idle, so compiling is slow there. Java in particular needs a paid instance or a VM.
 

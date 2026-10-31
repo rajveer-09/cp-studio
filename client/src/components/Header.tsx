@@ -1,19 +1,23 @@
-import { AlertTriangle, ChevronDown, FileCode2, Keyboard, ListChecks, Lock, LockOpen, Play, Save, Settings, Sparkles, Trash2 } from 'lucide-react';
+import { AlertTriangle, ChartLine, ChevronDown, Expand, FileCode2, Keyboard, LayoutDashboard, ListChecks, Lock, LockOpen, ListTodo, LogIn, LogOut, PanelTopClose, Play, Save, Settings, Shrink, Sparkles, Trash2 } from 'lucide-react';
 import { DropdownMenu } from 'radix-ui';
+import { useState } from 'react';
 import { toast } from 'sonner';
+import { navigate } from 'wouter/use-browser-location';
+import { goToSignIn, signOut } from '../lib/auth';
 import { editorBridge } from '../lib/editor';
 import { LANGUAGE_META, LANGUAGES } from '../lib/languages';
-import { toggleAssistant, toggleLayoutLock } from '../lib/layout';
+import { toggleAssistant, toggleFullscreen, toggleHeader, toggleLayoutLock, useFullscreen } from '../lib/layout';
 import { keyLabel } from '../lib/platform';
 import { runTests } from '../lib/runner';
 import { BUILTIN_TEMPLATES } from '../lib/templates';
 import { useStore } from '../store';
-import type { Template } from '../types';
-import { ThemeMenu } from './ThemePicker';
-import { Button, cn, Tip } from './ui';
+import type { AccountUser, Template } from '../types';
+import { AppModeSwitch } from './ThemePicker';
+import { Timer } from './Timer';
+import { Button, cn, Kbd, Tip } from './ui';
 
 /** Angle brackets around a text cursor, drawn in the text color so the mark suits every theme. */
-function Logo() {
+export function Logo() {
   return (
     <svg viewBox="0 0 24 24" className="size-[22px] shrink-0" aria-hidden>
       <defs>
@@ -132,6 +136,124 @@ function TemplateMenu() {
   );
 }
 
+export function Avatar({ user, size = 28 }: { user: AccountUser; size?: number }) {
+  const [broken, setBroken] = useState(false);
+  const initials = (user.name || user.email)
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join('');
+  return user.image && !broken ? (
+    <img
+      src={user.image}
+      alt=""
+      referrerPolicy="no-referrer"
+      onError={() => setBroken(true)}
+      className="shrink-0 rounded-full object-cover"
+      style={{ width: size, height: size }}
+    />
+  ) : (
+    <span
+      className="grid shrink-0 place-items-center rounded-full bg-accent/15 font-semibold text-accent"
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.4) }}
+      aria-hidden
+    >
+      {initials}
+    </span>
+  );
+}
+
+export function AccountMenu() {
+  const accounts = useStore((s) => Boolean(s.serverConfig?.accounts));
+  const account = useStore((s) => s.account);
+  if (!accounts) return null;
+
+  if (account.status !== 'signedIn') {
+    if (account.status === 'loading') return <span className="ml-0.5 size-7 shrink-0 animate-pulse rounded-full bg-panel-2" aria-hidden />;
+    return (
+      <Button variant="secondary" onClick={() => goToSignIn()} className="ml-0.5">
+        <LogIn />
+        <span className="hidden sm:inline">Sign in</span>
+      </Button>
+    );
+  }
+  const { user } = account;
+  return (
+    <DropdownMenu.Root>
+      <Tip label={user.name}>
+        <DropdownMenu.Trigger asChild>
+          <button
+            type="button"
+            aria-label="Account"
+            className="ml-0.5 shrink-0 rounded-full ring-2 ring-transparent transition outline-none hover:ring-line-strong focus-visible:ring-accent/60 data-[state=open]:ring-accent/50"
+          >
+            <Avatar user={user} />
+          </button>
+        </DropdownMenu.Trigger>
+      </Tip>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content align="end" sideOffset={8} className="popover z-50 w-64 rounded-xl border border-line bg-panel p-1.5 shadow-pop">
+          <div className="flex items-center gap-3 px-2 pt-1.5 pb-2.5">
+            <Avatar user={user} size={36} />
+            <div className="min-w-0">
+              <div className="truncate text-[13.5px] font-semibold">{user.name}</div>
+              <div className="truncate text-xs text-muted">{user.email}</div>
+            </div>
+          </div>
+          <DropdownMenu.Separator className="mb-1.5 h-px bg-line" />
+          <div className="px-2 pt-1 pb-2.5">
+            <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold tracking-wide text-subtle uppercase">
+              Appearance
+              <Kbd keys={['Alt', 'T']} />
+            </div>
+            <AppModeSwitch />
+          </div>
+          <DropdownMenu.Separator className="mb-1.5 h-px bg-line" />
+          <DropdownMenu.Item onSelect={() => navigate('/dashboard')} className={cn(menuItem, 'text-[13px]')}>
+            <LayoutDashboard className="size-3.5 text-muted" />
+            Dashboard
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => navigate('/stats')} className={cn(menuItem, 'text-[13px]')}>
+            <ChartLine className="size-3.5 text-muted" />
+            Stats
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => navigate('/problems')} className={cn(menuItem, 'text-[13px]')}>
+            <ListTodo className="size-3.5 text-muted" />
+            Problems
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() => {
+              // Settings live in the editor.
+              if (location.pathname !== '/') navigate('/');
+              useStore.getState().openDialog('settings');
+            }}
+            className={cn(menuItem, 'text-[13px]')}
+          >
+            <Settings className="size-3.5 text-muted" />
+            Settings
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => void signOut()} className={cn(menuItem, 'text-[13px]')}>
+            <LogOut className="size-3.5 text-muted" />
+            Sign out
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+function FullscreenButton() {
+  const fullscreen = useFullscreen();
+  return (
+    <Tip label={fullscreen ? 'Exit full screen' : 'Full screen'} keys={['Alt', 'Enter']}>
+      <Button variant="ghost" size="icon" onClick={toggleFullscreen} aria-label={fullscreen ? 'Exit full screen' : 'Full screen'} className="hidden sm:inline-flex">
+        {fullscreen ? <Shrink /> : <Expand />}
+      </Button>
+    </Tip>
+  );
+}
+
 export function Header() {
   const running = useStore((s) => s.running);
   const assistantOpen = useStore((s) => s.assistantOpen);
@@ -151,6 +273,7 @@ export function Header() {
 
       <div className="flex-1" />
 
+      <Timer />
       <Tip label="Run selected test" keys={['Mod', 'Enter']}>
         <Button onClick={() => runTests('current')} loading={running === 'current'} disabled={Boolean(running)}>
           {running !== 'current' && <Play />}
@@ -166,7 +289,8 @@ export function Header() {
 
       <div className="mx-0.5 hidden h-5 w-px bg-line sm:block" />
 
-      <ThemeMenu />
+      <FullscreenButton />
+
       <Tip label={locked ? 'Layout locked: click to unlock' : 'Lock the layout (panels can’t be resized or moved)'} keys={['Alt', 'K']}>
         <Button
           variant={locked ? 'secondary' : 'ghost'}
@@ -179,12 +303,17 @@ export function Header() {
           {locked ? <Lock /> : <LockOpen />}
         </Button>
       </Tip>
+      <Tip label="Hide the top bar" keys={['Alt', 'H']}>
+        <Button variant="ghost" size="icon" onClick={toggleHeader} aria-label="Hide the top bar" className="hidden md:inline-flex">
+          <PanelTopClose />
+        </Button>
+      </Tip>
       <Tip label="Keyboard shortcuts" keys={['Alt', '/']}>
         <Button variant="ghost" size="icon" onClick={() => openDialog('shortcuts')} aria-label="Keyboard shortcuts" className="hidden lg:inline-flex">
           <Keyboard />
         </Button>
       </Tip>
-      <Tip label="Settings">
+      <Tip label="Settings and editor theme">
         <Button variant="ghost" size="icon" onClick={() => openDialog('settings')} aria-label="Settings">
           <Settings />
         </Button>
@@ -200,6 +329,7 @@ export function Header() {
           <span className="hidden lg:inline">Assistant</span>
         </Button>
       </Tip>
+      <AccountMenu />
     </header>
   );
 }

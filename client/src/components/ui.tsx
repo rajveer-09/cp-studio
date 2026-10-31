@@ -146,7 +146,7 @@ export function Segmented<T extends string | number>({
   );
 }
 
-const MODAL_WIDTHS = { md: 'max-w-md', lg: 'max-w-lg', '2xl': 'max-w-2xl' } as const;
+const MODAL_WIDTHS = { md: 'max-w-md', lg: 'max-w-lg', '2xl': 'max-w-2xl', '4xl': 'max-w-4xl' } as const;
 
 export function Modal({
   open,
@@ -156,6 +156,8 @@ export function Modal({
   children,
   width = 'md',
   dismissible = true,
+  bodyClassName,
+  className,
 }: {
   open: boolean;
   onClose: () => void;
@@ -164,6 +166,9 @@ export function Modal({
   children: ReactNode;
   width?: keyof typeof MODAL_WIDTHS;
   dismissible?: boolean;
+  /** Replaces the body's default padding and scrolling (e.g. for a sidebar layout). */
+  bodyClassName?: string;
+  className?: string;
 }) {
   const block = (e: Event) => !dismissible && e.preventDefault();
   return (
@@ -182,6 +187,7 @@ export function Modal({
           className={cn(
             'dialog-content fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-line bg-panel shadow-pop outline-none',
             MODAL_WIDTHS[width],
+            className,
           )}
         >
           <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
@@ -197,7 +203,7 @@ export function Modal({
               </Dialog.Close>
             )}
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+          <div className={bodyClassName ?? 'min-h-0 flex-1 overflow-y-auto px-5 py-4'}>{children}</div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

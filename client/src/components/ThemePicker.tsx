@@ -1,18 +1,7 @@
 import { Check, Moon, Sun } from 'lucide-react';
-import { DropdownMenu } from 'radix-ui';
-import { selectTheme, themeById, THEMES, toggleDarkLight, type AppTheme } from '../lib/themes';
+import { APP_THEMES, editorThemeOf, selectEditorTheme, selectTheme, themeById, THEMES, type AppTheme } from '../lib/themes';
 import { useStore } from '../store';
-import { Button, cn, Kbd, Tip } from './ui';
-
-function ThemeDots({ theme }: { theme: AppTheme }) {
-  return (
-    <span className="flex h-5 w-9 shrink-0 items-center justify-center gap-0.5 rounded border border-line" style={{ background: theme.ui.panel }}>
-      {[theme.syntax.keyword, theme.syntax.string, theme.ui.accent].map((color, i) => (
-        <span key={i} className="size-1.5 rounded-full" style={{ background: color }} />
-      ))}
-    </span>
-  );
-}
+import { cn } from './ui';
 
 function Slider({ label, left, right, value, onChange }: { label: string; left: string; right: string; value: number; onChange: (value: number) => void }) {
   return (
@@ -41,7 +30,7 @@ function Slider({ label, left, right, value, onChange }: { label: string; left: 
   );
 }
 
-/** Darkness and contrast on top of the current theme, for comfortable long sessions. Applies to the whole app and the editor. */
+/** Darkness and contrast for the editor, on top of its theme, for comfortable long sessions. The app keeps its colors. */
 export function ThemeAdjustments() {
   const darkness = useStore((s) => s.settings.uiDarkness);
   const contrast = useStore((s) => s.settings.uiContrast);
@@ -52,58 +41,59 @@ export function ThemeAdjustments() {
       <Slider label="Contrast" left="Softer" right="Sharper" value={contrast} onChange={(uiContrast) => update({ uiContrast })} />
       {(darkness !== 0 || contrast !== 0) && (
         <button type="button" onClick={() => update({ uiDarkness: 0, uiContrast: 0 })} className="text-xs text-muted underline-offset-2 hover:text-fg hover:underline">
-          Reset to the theme's default
+          Reset the editor's colors
         </button>
       )}
     </div>
   );
 }
 
-const GROUPS = [
-  { label: 'Dark', dark: true },
-  { label: 'Light', dark: false },
+const MODES = [
+  { id: APP_THEMES[0], label: 'Dark', icon: Moon },
+  { id: APP_THEMES[1], label: 'Light', icon: Sun },
 ];
 
-export function ThemeMenu() {
-  const current = themeById(useStore((s) => s.theme));
-  const item = 'flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] outline-none data-[highlighted]:bg-hover';
-
+/** The app's two looks, as a pair of buttons. */
+export function AppModeSwitch({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
+  const current = useStore((s) => s.theme);
   return (
-    <DropdownMenu.Root>
-      <Tip label="Theme" keys={['Alt', 'T']}>
-        <DropdownMenu.Trigger asChild>
-          <Button variant="ghost" size="icon" aria-label="Theme" className="hidden sm:inline-flex">
-            {current.dark ? <Moon /> : <Sun />}
-          </Button>
-        </DropdownMenu.Trigger>
-      </Tip>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content align="end" sideOffset={6} className="popover z-50 max-h-[80vh] w-64 overflow-y-auto rounded-xl border border-line bg-panel p-1.5 shadow-pop">
-          <DropdownMenu.Label className="px-2 pt-1.5 pb-2 text-[11px] font-semibold tracking-wide text-subtle uppercase">Easy on the eyes</DropdownMenu.Label>
-          <div className="px-2 pb-2.5">
-            <ThemeAdjustments />
-          </div>
-          <DropdownMenu.Separator className="my-1.5 h-px bg-line" />
-          {GROUPS.map((group) => (
-            <DropdownMenu.Group key={group.label}>
-              <DropdownMenu.Label className="px-2 pt-1.5 pb-1 text-[11px] font-semibold tracking-wide text-subtle uppercase">{group.label}</DropdownMenu.Label>
-              {THEMES.filter((t) => t.dark === group.dark).map((theme) => (
-                <DropdownMenu.Item key={theme.id} onSelect={() => selectTheme(theme.id)} className={item}>
-                  <ThemeDots theme={theme} />
-                  <span className="flex-1">{theme.name}</span>
-                  {theme.id === current.id && <Check className="size-3.5 text-accent" />}
-                </DropdownMenu.Item>
-              ))}
-            </DropdownMenu.Group>
-          ))}
-          <DropdownMenu.Separator className="my-1.5 h-px bg-line" />
-          <DropdownMenu.Item onSelect={toggleDarkLight} className={cn(item, 'justify-between text-muted')}>
-            Switch dark / light
-            <Kbd keys={['Alt', 'T']} />
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
+    <div role="radiogroup" aria-label="App theme" className="grid grid-cols-2 gap-1.5">
+      {MODES.map(({ id, label, icon: Icon }) => {
+        const theme = themeById(id);
+        const selected = current === id;
+        return (
+          <button
+            key={id}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => selectTheme(id)}
+            className={cn(
+              'overflow-hidden rounded-lg border text-left transition',
+              selected ? 'border-accent ring-2 ring-accent/30' : 'border-line hover:border-line-strong',
+            )}
+          >
+            {size === 'lg' && (
+              // A tiny picture of the app in this theme: header, editor card, side panel.
+              <div className="flex h-16 flex-col gap-1 p-1.5" style={{ background: theme.ui.bg }}>
+                <div className="h-2 rounded-sm" style={{ background: theme.ui.panel }} />
+                <div className="flex flex-1 gap-1">
+                  <div className="flex-[3] rounded-sm border" style={{ background: theme.ui.panel, borderColor: theme.ui.border }} />
+                  <div className="flex-1 rounded-sm border" style={{ background: theme.ui.panel, borderColor: theme.ui.border }}>
+                    <div className="m-1 h-1.5 rounded-sm" style={{ background: theme.ui.accent }} />
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12.5px] font-medium">
+              <Icon className="size-3.5 text-muted" />
+              <span className="flex-1">{label}</span>
+              {selected && <Check className="size-3.5 text-accent" />}
+            </div>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -112,7 +102,7 @@ function ThemeCard({ theme, selected }: { theme: AppTheme; selected: boolean }) 
   return (
     <button
       type="button"
-      onClick={() => selectTheme(theme.id)}
+      onClick={() => selectEditorTheme(theme.id)}
       className={cn(
         'overflow-hidden rounded-lg border text-left transition',
         selected ? 'border-accent ring-2 ring-accent/40' : 'border-line hover:border-line-strong',
@@ -132,7 +122,6 @@ function ThemeCard({ theme, selected }: { theme: AppTheme; selected: boolean }) 
         </div>
       </div>
       <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium" style={{ background: ui.panel2, color: ui.fg }}>
-        <span className="size-2 rounded-full" style={{ background: ui.accent }} />
         <span className="flex-1 truncate">{theme.name}</span>
         {selected && <Check className="size-3.5" style={{ color: ui.accent }} />}
       </div>
@@ -140,20 +129,30 @@ function ThemeCard({ theme, selected }: { theme: AppTheme; selected: boolean }) 
   );
 }
 
+/** Settings: the app's look, then the editor's theme for the current mode. */
 export function ThemeGrid() {
-  const current = useStore((s) => s.theme);
+  const dark = useStore((s) => themeById(s.theme).dark);
+  const editor = useStore(editorThemeOf);
+  // Signed in, the app's Dark / Light lives in the profile menu; visitors without one get it here.
+  const signedIn = useStore((s) => s.account.status === 'signedIn');
   return (
-    <div className="space-y-3 py-2.5">
-      {GROUPS.map((group) => (
-        <div key={group.label}>
-          <div className="mb-1.5 text-xs text-muted">{group.label}</div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {THEMES.filter((t) => t.dark === group.dark).map((theme) => (
-              <ThemeCard key={theme.id} theme={theme} selected={theme.id === themeById(current).id} />
-            ))}
+    <div className="space-y-4 py-2.5">
+      {!signedIn && (
+        <div>
+          <div className="mb-1.5 text-xs text-muted">App</div>
+          <div className="max-w-[320px]">
+            <AppModeSwitch size="lg" />
           </div>
         </div>
-      ))}
+      )}
+      <div>
+        <div className="mb-1.5 text-xs text-muted">Editor and test panel theme, used in {dark ? 'dark' : 'light'} mode (each mode remembers its own)</div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          {[...THEMES].sort((a, b) => Number(b.dark === dark) - Number(a.dark === dark)).map((theme) => (
+            <ThemeCard key={theme.id} theme={theme} selected={theme.id === editor} />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

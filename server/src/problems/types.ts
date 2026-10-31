@@ -14,6 +14,11 @@ export interface ImportedProblem {
   timeLimitMs?: number;
   /** LeetCode: the solution is a method, not a program reading stdin. */
   functionBased?: boolean;
+  /** LeetCode's difficulty and topics, when the judge publishes them. */
+  difficulty?: 'Easy' | 'Medium' | 'Hard';
+  tags?: string[];
+  /** Codeforces difficulty rating (800, 900, …), once Codeforces publishes it. */
+  rating?: number;
   snippets?: Partial<Record<Language, string>>;
   /** LeetCode: the snippet wrapped in a harness that runs one test from stdin (missing for design problems). */
   programs?: Partial<Record<Language, string>>;

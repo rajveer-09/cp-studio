@@ -21,7 +21,7 @@ problemsRouter.post('/import', async (req, res) => {
   }
 });
 
-problemsRouter.post('/from-page', (req, res) => {
+problemsRouter.post('/from-page', async (req, res) => {
   const { url, title, timeLimit, html, tests } = req.body ?? {};
   const validTests =
     Array.isArray(tests) && tests.length <= 30 && tests.every((t) => typeof t?.input === 'string' && typeof t?.expected === 'string');
@@ -29,7 +29,7 @@ problemsRouter.post('/from-page', (req, res) => {
     return res.status(400).json({ error: 'That page data is not from a Codeforces problem.' });
   }
   try {
-    res.json(fromCodeforcesPage({ url, title: String(title ?? ''), timeLimit: String(timeLimit ?? ''), html: html.slice(0, 500_000), tests }));
+    res.json(await fromCodeforcesPage({ url, title: String(title ?? ''), timeLimit: String(timeLimit ?? ''), html: html.slice(0, 500_000), tests }));
   } catch (err) {
     fail(res, err);
   }

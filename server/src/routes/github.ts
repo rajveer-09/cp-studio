@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { Router, type Request } from 'express';
-import { config, githubEnabled } from '../config.js';
+import { config, githubEnabled, siteOrigin } from '../config.js';
 
 /**
  * "Sign in with GitHub" for saving solutions to the user's own repositories. The server only runs the OAuth
@@ -12,10 +12,7 @@ export const githubRouter = Router();
 const STATE_TTL_MS = 10 * 60_000;
 const pendingStates = new Map<string, number>();
 
-function callbackUrl(req: Request): string {
-  const base = config.github.publicUrl || `${req.protocol}://${req.get('host')}`;
-  return `${base.replace(/\/$/, '')}/api/github/callback`;
-}
+const callbackUrl = (req: Request) => `${siteOrigin(req)}/api/github/callback`;
 
 /** A tiny page that stores the result in this site's storage, tells the opener, and closes. */
 function resultPage(result: { token?: string; error?: string }): string {

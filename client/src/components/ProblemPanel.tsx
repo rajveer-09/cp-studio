@@ -1,6 +1,25 @@
-import { Bookmark, Check, ChevronDown, Clock, Copy, Download, ExternalLink, FlaskConical, Pencil, RotateCcw, Send, Wand2, X } from 'lucide-react';
+import {
+  Bookmark,
+  Check,
+  ChevronDown,
+  Clock,
+  Copy,
+  Download,
+  ExternalLink,
+  FlaskConical,
+  Gauge,
+  Minus,
+  Plus,
+  RotateCcw,
+  Send,
+  Settings as SettingsIcon,
+  Tag,
+  Wand2,
+  X,
+  Zap,
+} from 'lucide-react';
 import { DropdownMenu } from 'radix-ui';
-import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { LANGUAGE_META } from '../lib/languages';
 import { copyText } from '../lib/platform';
@@ -14,11 +33,15 @@ import {
   openProblemTabs,
   openSubmission,
   requestLeetCodeDriver,
+  submitHelperVersion,
+  PLATFORM_COLORS,
+  topicName,
 } from '../lib/problems';
+import { applyDriverVisibility } from '../lib/harness';
 import { restoreSamples } from '../lib/testcases';
-import { useStore } from '../store';
-import type { Platform, ProblemMeta } from '../types';
-import { Button, Tip } from './ui';
+import { DEFAULT_SETTINGS, useStore } from '../store';
+import type { Platform, ProblemMeta, Settings } from '../types';
+import { Button, cn, Tip } from './ui';
 
 // Math typesetting (KaTeX) is only downloaded when a statement is shown.
 const Statement = lazy(() => import('./Statement'));
@@ -34,9 +57,7 @@ function CodeforcesGuide({ url, onClose }: { url: string; onClose: () => void })
       <button type="button" onClick={onClose} aria-label="Close" className="absolute top-2 right-2 rounded p-0.5 text-subtle hover:text-fg">
         <X className="size-3.5" />
       </button>
-      <p className="mb-2 pr-6 text-muted">
-        Codeforces blocks automated downloads, so CP Studio reads the problem from the page you open in your browser:
-      </p>
+      <p className="mb-2 pr-6 text-muted">Codeforces blocks automated downloads, so CP Studio reads the problem from the page you open in your browser:</p>
       <ol className="space-y-1.5">
         <li className="flex flex-wrap items-center gap-1.5">
           <b>1.</b> Drag
@@ -95,10 +116,7 @@ function ImportBar() {
 
   return (
     <div className="shrink-0 border-b border-line px-4 py-2.5">
-      <form
-        onSubmit={submit}
-        className="flex h-8 items-center rounded-lg border border-line bg-panel-2/50 transition-colors focus-within:border-accent/60"
-      >
+      <form onSubmit={submit} className="flex h-8 items-center rounded-lg border border-line bg-panel-2/50 transition-colors focus-within:border-accent/60">
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button
@@ -157,10 +175,184 @@ function ImportBar() {
   );
 }
 
-function ProblemHeader({ meta, editing, onToggleEdit }: { meta: ProblemMeta; editing: boolean; onToggleEdit: () => void }) {
+/** Statement palettes, as color-variable overrides on the statement area ('theme' keeps the editor theme's). */
+const STATEMENT_PALETTES: Record<Settings['statementColors'], { label: string; swatch: [string, string]; vars?: CSSProperties }> = {
+  theme: { label: 'Editor theme', swatch: ['var(--panel)', 'var(--fg)'] },
+  paper: {
+    label: 'Paper',
+    swatch: ['#fbf7ee', '#2b2721'],
+    vars: {
+      '--panel': '#fbf7ee',
+      '--panel-2': '#f3ecdc',
+      '--hover': '#efe6d2',
+      '--fg': '#2b2721',
+      '--muted': '#5f574b',
+      '--subtle': '#8a8172',
+      '--border': '#e6dcc8',
+      '--border-strong': '#d6c9ae',
+      '--accent': '#b45309',
+      colorScheme: 'light',
+    } as CSSProperties,
+  },
+  night: {
+    label: 'Night',
+    swatch: ['#0b0e14', '#c9d1d9'],
+    vars: {
+      '--panel': '#0b0e14',
+      '--panel-2': '#121722',
+      '--hover': '#161c28',
+      '--fg': '#c9d1d9',
+      '--muted': '#8b949e',
+      '--subtle': '#6e7681',
+      '--border': '#1d2330',
+      '--border-strong': '#2a3242',
+      '--accent': '#79c0ff',
+      colorScheme: 'dark',
+    } as CSSProperties,
+  },
+};
+
+const DRIVER_CHOICES: { id: Settings['leetcodeDriver']; label: string; hint: string }[] = [
+  { id: 'hidden', label: 'Only the Solution class', hint: 'Like LeetCode; the driver is added when it runs' },
+  { id: 'shown', label: 'Show the driver code', hint: 'In the tab, folded above and below' },
+];
+
+const LAYOUTS: { id: Settings['statementLayout']; label: string; hint: string }[] = [
+  { id: 'enhanced', label: 'Enhanced', hint: 'LeetCode-style reading layout' },
+  { id: 'standard', label: 'Standard', hint: 'As imported from the judge' },
+];
+
+const menuItem = 'flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] outline-none data-[highlighted]:bg-hover';
+const menuLabel = 'px-2 pt-1.5 pb-1 text-[11px] font-semibold tracking-wide text-subtle uppercase';
+
+/** The Problem section's own settings: auto-fill on the judge, and how the statement reads. */
+function ProblemSettings({ helper, leetcode }: { helper: boolean; leetcode: boolean }) {
+  const driver = useStore((s) => s.settings.leetcodeDriver);
+  const colors = useStore((s) => s.settings.statementColors);
+  const size = useStore((s) => s.settings.statementSize);
+  const layout = useStore((s) => s.settings.statementLayout);
+  const update = useStore.getState().updateSettings;
+  return (
+    <DropdownMenu.Root>
+      <Tip label="Problem settings">
+        <DropdownMenu.Trigger asChild>
+          <Button size="icon-sm" variant="ghost" aria-label="Problem settings">
+            <SettingsIcon />
+          </Button>
+        </DropdownMenu.Trigger>
+      </Tip>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content align="end" sideOffset={6} className="popover z-50 w-64 rounded-xl border border-line bg-panel p-1.5 shadow-pop">
+          <DropdownMenu.Label className={menuLabel}>Auto-fill on the judge</DropdownMenu.Label>
+          <DropdownMenu.Item onSelect={() => useStore.getState().openDialog('submitHelper')} className={menuItem}>
+            <Zap className={cn('size-3.5', helper ? 'text-success' : 'text-muted')} />
+            <span className="flex-1">{helper ? 'Helper installed' : 'Set up auto-fill…'}</span>
+            {helper && <Check className="size-3.5 text-success" />}
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator className="my-1.5 h-px bg-line" />
+          {leetcode && (
+            <>
+              <DropdownMenu.Label className={menuLabel}>LeetCode driver</DropdownMenu.Label>
+              <DropdownMenu.RadioGroup
+                value={driver}
+                onValueChange={(v) => {
+                  update({ leetcodeDriver: v as Settings['leetcodeDriver'] });
+                  applyDriverVisibility(v !== 'shown');
+                }}
+              >
+                {DRIVER_CHOICES.map((c) => (
+                  <DropdownMenu.RadioItem key={c.id} value={c.id} onSelect={(e) => e.preventDefault()} className={cn(menuItem, 'items-start')}>
+                    <span className="flex-1">
+                      <span className="block">{c.label}</span>
+                      <span className="block text-[11.5px] text-subtle">{c.hint}</span>
+                    </span>
+                    <DropdownMenu.ItemIndicator>
+                      <Check className="mt-0.5 size-3.5 text-accent" />
+                    </DropdownMenu.ItemIndicator>
+                  </DropdownMenu.RadioItem>
+                ))}
+              </DropdownMenu.RadioGroup>
+              <DropdownMenu.Separator className="my-1.5 h-px bg-line" />
+            </>
+          )}
+          <DropdownMenu.Label className={menuLabel}>Display</DropdownMenu.Label>
+          <DropdownMenu.RadioGroup value={layout} onValueChange={(v) => update({ statementLayout: v as Settings['statementLayout'] })}>
+            {LAYOUTS.map((l) => (
+              <DropdownMenu.RadioItem key={l.id} value={l.id} onSelect={(e) => e.preventDefault()} className={cn(menuItem, 'items-start')}>
+                <span className="flex-1">
+                  <span className="block">{l.label}</span>
+                  <span className="block text-[11.5px] text-subtle">{l.hint}</span>
+                </span>
+                <DropdownMenu.ItemIndicator>
+                  <Check className="mt-0.5 size-3.5 text-accent" />
+                </DropdownMenu.ItemIndicator>
+              </DropdownMenu.RadioItem>
+            ))}
+          </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator className="my-1.5 h-px bg-line" />
+          <DropdownMenu.Label className={menuLabel}>Statement colors</DropdownMenu.Label>
+          <DropdownMenu.RadioGroup value={colors} onValueChange={(v) => update({ statementColors: v as Settings['statementColors'] })}>
+            {(Object.keys(STATEMENT_PALETTES) as Settings['statementColors'][]).map((key) => (
+              <DropdownMenu.RadioItem key={key} value={key} onSelect={(e) => e.preventDefault()} className={menuItem}>
+                <span
+                  className="flex h-4 w-6 items-center justify-center rounded border border-line-strong text-[9px] font-bold"
+                  style={{ background: STATEMENT_PALETTES[key].swatch[0], color: STATEMENT_PALETTES[key].swatch[1] }}
+                >
+                  Aa
+                </span>
+                <span className="flex-1">{STATEMENT_PALETTES[key].label}</span>
+                <DropdownMenu.ItemIndicator>
+                  <Check className="size-3.5 text-accent" />
+                </DropdownMenu.ItemIndicator>
+              </DropdownMenu.RadioItem>
+            ))}
+          </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator className="my-1.5 h-px bg-line" />
+          <div className="flex items-center justify-between px-2 py-1.5 text-[13px]">
+            <span>Text size</span>
+            <span className="flex items-center gap-1">
+              <Button
+                size="icon-sm"
+                onClick={() => update({ statementSize: Math.max(12, size - 1) })}
+                disabled={size <= 12}
+                aria-label="Smaller statement text"
+              >
+                <Minus />
+              </Button>
+              <span className="w-7 text-center font-mono text-[12.5px] tabular-nums">{size}</span>
+              <Button size="icon-sm" onClick={() => update({ statementSize: Math.min(20, size + 1) })} disabled={size >= 20} aria-label="Larger statement text">
+                <Plus />
+              </Button>
+            </span>
+          </div>
+          <DropdownMenu.Separator className="my-1.5 h-px bg-line" />
+          <DropdownMenu.Item
+            disabled={colors === DEFAULT_SETTINGS.statementColors && size === DEFAULT_SETTINGS.statementSize && layout === DEFAULT_SETTINGS.statementLayout}
+            onSelect={(e) => {
+              e.preventDefault();
+              update({
+                statementColors: DEFAULT_SETTINGS.statementColors,
+                statementSize: DEFAULT_SETTINGS.statementSize,
+                statementLayout: DEFAULT_SETTINGS.statementLayout,
+              });
+            }}
+            className={cn(menuItem, 'text-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-40')}
+          >
+            <RotateCcw className="size-3.5" />
+            Reset problem settings
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+function ProblemHeader({ meta }: { meta: ProblemMeta }) {
   const language = useStore((s) => s.language);
   const aiEnabled = useStore((s) => s.serverConfig?.aiEnabled);
   const [busy, setBusy] = useState(false);
+  // Set by the helper before the app starts, so reading it once is enough.
+  const [helper] = useState(() => Boolean(submitHelperVersion()));
 
   const starter = async () => {
     setBusy(true);
@@ -168,25 +360,38 @@ function ProblemHeader({ meta, editing, onToggleEdit }: { meta: ProblemMeta; edi
     setBusy(false);
   };
   const remove = () => useStore.setState({ problem: '', problemMeta: null });
+  const enhanced = useStore((s) => s.settings.statementLayout !== 'standard');
 
   return (
     <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line py-2 pr-2 pl-4">
-      <div className="flex min-w-0 flex-col">
-        <a href={meta.url} target="_blank" rel="noreferrer" className="group flex min-w-0 items-center gap-1.5 text-[14px] font-semibold tracking-[-0.01em]">
-          <span className="truncate group-hover:underline group-hover:underline-offset-2">{meta.title}</span>
-          <ExternalLink className="size-3.5 shrink-0 text-subtle" />
-        </a>
-        <span className="flex items-center gap-1.5 text-[11.5px] text-subtle">
-          {PLATFORM_META[meta.platform].label}
-          {meta.timeLimitMs && (
-            <>
-              <span aria-hidden>·</span>
-              <Clock className="size-3" />
-              {meta.timeLimitMs / 1000} s
-            </>
-          )}
+      {enhanced ? (
+        // The title is at the top of the statement; here just where it is from.
+        <span className="flex min-w-0 items-center gap-2 text-[12.5px] text-muted">
+          <span className="size-2 shrink-0 rounded-full" style={{ background: PLATFORM_COLORS[meta.platform] }} />
+          <span className="font-medium text-fg">{PLATFORM_META[meta.platform].label}</span>
+          <span aria-hidden className="text-subtle">
+            /
+          </span>
+          <span className="truncate font-mono text-[12px]">{meta.id}</span>
         </span>
-      </div>
+      ) : (
+        <div className="flex min-w-0 flex-col">
+          <a href={meta.url} target="_blank" rel="noreferrer" className="group flex min-w-0 items-center gap-1.5 text-[14px] font-semibold tracking-[-0.01em]">
+            <span className="truncate group-hover:underline group-hover:underline-offset-2">{meta.title}</span>
+            <ExternalLink className="size-3.5 shrink-0 text-subtle" />
+          </a>
+          <span className="flex items-center gap-1.5 text-[11.5px] text-subtle">
+            {PLATFORM_META[meta.platform].label}
+            {meta.timeLimitMs && (
+              <>
+                <span aria-hidden>·</span>
+                <Clock className="size-3" />
+                {meta.timeLimitMs / 1000} s
+              </>
+            )}
+          </span>
+        </div>
+      )}
       <div className="flex-1" />
       {meta.programs?.[language] ? (
         <Tip label={`Put the ${LANGUAGE_META[language].label} starter back in its tab (Ctrl+Z undoes it)`}>
@@ -205,16 +410,19 @@ function ProblemHeader({ meta, editing, onToggleEdit }: { meta: ProblemMeta; edi
           </Tip>
         )
       )}
-      <Tip label={`Copy your ${LANGUAGE_META[language].label} code and open the ${PLATFORM_META[meta.platform].label} submit page`}>
+      <Tip
+        label={
+          helper
+            ? `Open the ${PLATFORM_META[meta.platform].label} submit page with your ${LANGUAGE_META[language].label} code filled in`
+            : `Copy your ${LANGUAGE_META[language].label} code and open the ${PLATFORM_META[meta.platform].label} submit page`
+        }
+      >
         <Button size="sm" variant="primary" onClick={() => openSubmission(meta)}>
           <Send />
-          Submit on {PLATFORM_META[meta.platform].label}
+          Submit
         </Button>
       </Tip>
-      <Button size="sm" variant="ghost" onClick={onToggleEdit}>
-        {editing ? <Check /> : <Pencil />}
-        {editing ? 'Done' : 'Edit'}
-      </Button>
+      <ProblemSettings helper={helper} leetcode={Boolean(meta.functionBased)} />
       <Tip label="Remove problem (tests stay)">
         <Button size="icon-sm" variant="ghost" onClick={remove} aria-label="Remove problem">
           <X />
@@ -239,7 +447,9 @@ function SampleBlock({ label, text }: { label: string; text: string }) {
           <Copy className="size-3.5" />
         </button>
       </div>
-      <pre className="max-h-64 overflow-auto px-3 pb-2.5 font-mono text-[12.5px] leading-relaxed">{text.replace(/\n$/, '') || <span className="text-subtle italic">(empty)</span>}</pre>
+      <pre className="max-h-64 overflow-auto px-3 pb-2.5 font-mono text-[12.5px] leading-relaxed">
+        {text.replace(/\n$/, '') || <span className="text-subtle italic">(empty)</span>}
+      </pre>
     </div>
   );
 }
@@ -285,35 +495,200 @@ function SampleTests({ samples }: { samples: { input: string; expected: string }
   );
 }
 
+const Chip = ({ children }: { children: ReactNode }) => (
+  <span className="inline-flex items-center gap-1.5 rounded-full bg-[color-mix(in_srgb,var(--fg)_7%,transparent)] px-2.5 py-1 text-[12px] font-medium text-muted [&_svg]:size-3.5">
+    {children}
+  </span>
+);
+
+/** Enhanced display: the title at the top of the statement, with the facts as chips (like LeetCode's problem page). */
+/** LeetCode's difficulty colors, toned to read on dark and light statement colors alike. */
+const DIFFICULTY_COLORS = { Easy: '#12a89a', Medium: '#d08d00', Hard: '#e2457b' } as const;
+
+function EnhancedTitle({ meta, examples }: { meta: ProblemMeta; examples: number }) {
+  const judge = PLATFORM_META[meta.platform].label;
+  const [showTopics, setShowTopics] = useState(false);
+  return (
+    <header className="mb-6">
+      <h1 className="text-[1.45em] leading-snug font-semibold tracking-[-0.015em] text-fg">{meta.title}</h1>
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        {meta.difficulty && (
+          <span
+            className="inline-flex items-center rounded-full px-2.5 py-1 text-[12px] font-semibold"
+            style={{ color: DIFFICULTY_COLORS[meta.difficulty], background: `color-mix(in srgb, ${DIFFICULTY_COLORS[meta.difficulty]} 14%, transparent)` }}
+          >
+            {meta.difficulty}
+          </span>
+        )}
+        {meta.rating ? (
+          <Chip>
+            <Gauge />
+            Rating {meta.rating}
+          </Chip>
+        ) : null}
+        {meta.tags?.length ? (
+          <button type="button" onClick={() => setShowTopics((s) => !s)} aria-expanded={showTopics} className="rounded-full">
+            <Chip>
+              <Tag />
+              Topics
+              <ChevronDown className={cn('transition', showTopics && 'rotate-180')} />
+            </Chip>
+          </button>
+        ) : null}
+        <Chip>
+          <span className="size-2 rounded-full" style={{ background: PLATFORM_COLORS[meta.platform] }} />
+          {judge}
+        </Chip>
+        {meta.timeLimitMs && (
+          <Chip>
+            <Clock />
+            {meta.timeLimitMs / 1000} s
+          </Chip>
+        )}
+        {examples > 0 && (
+          <Chip>
+            <FlaskConical />
+            {examples} example{examples === 1 ? '' : 's'}
+          </Chip>
+        )}
+        <a
+          href={meta.url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium text-muted transition hover:bg-[color-mix(in_srgb,var(--fg)_7%,transparent)] hover:text-fg"
+        >
+          Open on {judge}
+          <ExternalLink className="size-3" />
+        </a>
+      </div>
+      {showTopics && meta.tags?.length ? (
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {meta.tags.map((tag) => (
+            <span key={tag} className="rounded-full border border-line px-2.5 py-0.5 text-[12px] text-muted">
+              {topicName(tag)}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </header>
+  );
+}
+
+function SampleValue({ label, text }: { label: string; text: string }) {
+  const copy = () => copyText(text).then(() => toast.success(`${label} copied`, { duration: 1200 }));
+  return (
+    <div className="group/value">
+      <div className="flex items-center gap-2">
+        <span className="text-[0.95em] font-semibold text-fg">{label}:</span>
+        <button
+          type="button"
+          onClick={copy}
+          aria-label={`Copy ${label.toLowerCase()}`}
+          className="rounded p-0.5 text-subtle opacity-0 transition group-hover/value:opacity-100 hover:text-fg focus-visible:opacity-100"
+        >
+          <Copy className="size-3.5" />
+        </button>
+      </div>
+      <pre className="mt-1 overflow-x-auto font-mono text-[0.9em] leading-relaxed text-[color-mix(in_srgb,var(--fg)_85%,var(--muted))]">
+        {text.replace(/\n$/, '') || <span className="text-subtle italic">(empty)</span>}
+      </pre>
+    </div>
+  );
+}
+
+/** "Use as test cases", or a note that they already are. */
+function UseSamples({ samples }: { samples: { input: string; expected: string }[] }) {
+  const inUse = useStore(
+    (s) => s.tests.length === samples.length && samples.every((t, i) => s.tests[i].input === t.input && s.tests[i].expected === t.expected),
+  );
+  return inUse ? (
+    <span className="flex items-center gap-1 text-xs text-success">
+      <Check className="size-3.5" />
+      These are your test cases
+    </span>
+  ) : (
+    <Tip label="Replace your test cases with these samples (undo available)">
+      <Button size="sm" variant="ghost" onClick={restoreSamples} className="[&_svg]:text-accent">
+        <FlaskConical />
+        Use as test cases
+      </Button>
+    </Tip>
+  );
+}
+
+/**
+ * Enhanced display of the judge's samples, LeetCode style: "Example 1:" over a block with a rule on its left. When
+ * the statement already shows its examples (LeetCode), only the "Use as test cases" row remains.
+ */
+function EnhancedSamples({ samples, inStatement }: { samples: { input: string; expected: string }[]; inStatement: boolean }) {
+  return (
+    <section className="mt-8">
+      {!inStatement &&
+        samples.map((t, i) => (
+          <div key={i} className="mt-6 first:mt-0">
+            <h4 className="mb-2.5 text-[1em] font-semibold text-fg">Example {i + 1}:</h4>
+            <div className="space-y-3 border-l-2 border-line-strong pl-4">
+              <SampleValue label="Input" text={t.input} />
+              <SampleValue label="Output" text={t.expected} />
+            </div>
+          </div>
+        ))}
+      <div className={cn('flex items-center gap-2 border-t border-line pt-4 text-[12.5px] text-muted', !inStatement && 'mt-8')}>
+        {samples.length} sample test{samples.length === 1 ? '' : 's'}
+        <div className="flex-1" />
+        <UseSamples samples={samples} />
+      </div>
+    </section>
+  );
+}
+
 export function ProblemPanel() {
   const problem = useStore((s) => s.problem);
   const meta = useStore((s) => s.problemMeta);
   const setProblem = useStore((s) => s.setProblem);
-  const [editing, setEditing] = useState(false);
-  const showEditor = !meta || editing;
+  // An imported statement is shown as the judge wrote it; the box is only for pasting one when nothing is imported.
+  const showEditor = !meta;
+  const palette = useStore((s) => STATEMENT_PALETTES[s.settings.statementColors] ?? STATEMENT_PALETTES.theme);
+  const size = useStore((s) => s.settings.statementSize);
+  const enhanced = useStore((s) => s.settings.statementLayout !== 'standard');
 
   return (
     <div className="flex h-full flex-col">
-      <ImportBar />
-      {meta && <ProblemHeader meta={meta} editing={editing} onToggleEdit={() => setEditing((e) => !e)} />}
-      <div className="min-h-0 flex-1 overflow-auto">
-        {showEditor ? (
-          <div className="flex h-full flex-col p-3">
-            <textarea
-              value={problem}
-              onChange={(e) => setProblem(e.target.value)}
-              placeholder={'Import a problem above, or paste the statement here.\n\nThe AI assistant reads it, which makes /fix, /hint and generated tests much more accurate.'}
-              className="h-full min-h-32 w-full resize-none rounded-lg border border-line bg-panel-2/60 p-3 text-[13px] leading-relaxed placeholder:text-subtle focus:border-accent/60"
-            />
-          </div>
-        ) : (
-          <div className="@container max-w-[860px] px-4 pt-4 pb-6">
-            <Suspense fallback={<div className="h-40" />}>
-              <Statement content={problem || '_No statement._'} />
-            </Suspense>
-            {meta?.samples?.length ? <SampleTests samples={meta.samples} /> : null}
-          </div>
-        )}
+      {/* The whole Problem section (search, heading, statement) shares the chosen reading colors. */}
+      <div
+        className="flex min-h-0 flex-1 flex-col bg-panel text-fg"
+        style={showEditor ? undefined : ({ ...palette.vars, '--statement-size': `${size}px` } as CSSProperties)}
+      >
+        <ImportBar />
+        {meta && <ProblemHeader meta={meta} />}
+        <div className="min-h-0 flex-1 overflow-auto">
+          {showEditor ? (
+            <div className="flex h-full flex-col p-3">
+              <textarea
+                value={problem}
+                onChange={(e) => setProblem(e.target.value)}
+                placeholder={
+                  'Import a problem above, or paste the statement here.\n\nThe AI assistant reads it, which makes /fix, /hint and generated tests much more accurate.'
+                }
+                className="h-full min-h-32 w-full resize-none rounded-lg border border-line bg-panel-2/60 p-3 text-[13px] leading-relaxed placeholder:text-subtle focus:border-accent/60"
+              />
+            </div>
+          ) : (
+            <div className={cn('@container', enhanced ? 'mx-auto max-w-[780px] px-6 pt-6 pb-10' : 'max-w-[860px] px-4 pt-4 pb-6')}>
+              {enhanced && meta && <EnhancedTitle meta={meta} examples={meta.samples?.length ?? 0} />}
+              <Suspense fallback={<div className="h-40" />}>
+                <Statement content={problem || '_No statement._'} enhanced={enhanced} />
+              </Suspense>
+              {meta?.samples?.length ? (
+                enhanced ? (
+                  <EnhancedSamples samples={meta.samples} inStatement={/^#{3,4} Example\b/m.test(problem)} />
+                ) : (
+                  <SampleTests samples={meta.samples} />
+                )
+              ) : null}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
