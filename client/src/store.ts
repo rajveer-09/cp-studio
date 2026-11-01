@@ -15,6 +15,7 @@ import type {
   ReviewState,
   ServerConfig,
   Settings,
+  SheetEntry,
   Template,
   TestCase,
   TestResult,
@@ -51,7 +52,8 @@ export const DEFAULT_SETTINGS: Settings = {
   compareMode: 'tokens',
   floatTolerance: 0,
   ignoreCase: false,
-  ioPosition: 'bottom',
+  // The test panel starts beside the editor (narrow screens stack it below anyway).
+  ioPosition: 'right',
   ioFontSize: 13,
   uiDarkness: 0,
   uiContrast: 0,
@@ -84,6 +86,8 @@ interface PersistedState {
   assistantOpen: boolean;
   watches: Record<Language, string[]>;
   timer: TimerState | null;
+  /** Practice-sheet progress, keyed like "cf:1669D". */
+  sheetProgress: Record<string, SheetEntry>;
 }
 
 interface SessionState {
@@ -138,7 +142,7 @@ interface Actions {
 export type AppState = PersistedState & SessionState & Actions;
 
 /** The parts of the workspace that follow a signed-in user between devices. Theme and chat stay per device. */
-export const SYNCED_KEYS = ['language', 'files', 'activeFile', 'tests', 'activeTestId', 'problem', 'problemMeta', 'settings', 'customTemplates', 'watches'] as const;
+export const SYNCED_KEYS = ['language', 'files', 'activeFile', 'tests', 'activeTestId', 'problem', 'problemMeta', 'settings', 'customTemplates', 'watches', 'sheetProgress'] as const;
 export type SyncedWorkspace = Pick<PersistedState, (typeof SYNCED_KEYS)[number]>;
 
 /** A new visitor's workspace (used after signing out, so the next person doesn't see your code). */
@@ -153,6 +157,7 @@ export const freshWorkspace = (): SyncedWorkspace => ({
   settings: DEFAULT_SETTINGS,
   customTemplates: [],
   watches: { cpp: [], java: [], python: [] },
+  sheetProgress: {},
 });
 
 export const activeFileOf = (s: Pick<AppState, 'files' | 'activeFile'>, language: Language): CodeFile =>
@@ -190,9 +195,11 @@ export const useStore = create<AppState>()(
       settings: DEFAULT_SETTINGS,
       customTemplates: [],
       chat: [],
-      assistantOpen: true,
+      // Closed until asked for (Assistant button or Alt+B), so the editor has the room.
+      assistantOpen: false,
       watches: { cpp: [], java: [], python: [] },
       timer: null,
+      sheetProgress: {},
 
       debug: null,
       debugStep: 0,
@@ -308,6 +315,7 @@ export const useStore = create<AppState>()(
         assistantOpen: s.assistantOpen,
         watches: s.watches,
         timer: s.timer,
+        sheetProgress: s.sheetProgress,
       }),
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<PersistedState> & { code?: Record<Language, string> };

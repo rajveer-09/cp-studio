@@ -3,7 +3,7 @@ import { Tooltip } from 'radix-ui';
 import { lazy, Suspense, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { toast, Toaster } from 'sonner';
-import { Route, Switch } from 'wouter';
+import { Redirect, Route, Switch } from 'wouter';
 import { AssistantPanel } from './components/assistant/AssistantPanel';
 import { BottomPanel } from './components/BottomPanel';
 import { CodeEditor } from './components/CodeEditor';
@@ -33,7 +33,9 @@ const IDE_CARD = `${CARD} ide-theme text-fg`;
 const AuthPage = lazy(() => import('./components/AuthPage'));
 const ProblemsPage = lazy(() => import('./components/ProblemsPage'));
 const DashboardPage = lazy(() => import('./components/DashboardPage'));
-const StatsPage = lazy(() => import('./components/StatsPage'));
+const SheetPage = lazy(() => import('./components/SheetPage'));
+const ContestsPage = lazy(() => import('./components/ContestsPage'));
+const ResourcesPage = lazy(() => import('./components/ResourcesPage'));
 
 function Workspace() {
   const assistantOpen = useStore((s) => s.assistantOpen);
@@ -147,23 +149,53 @@ export default function App() {
             <AuthPage mode="signup" />
           </Suspense>
         </Route>
-        <Route path="/dashboard">
+        <Route path="/profile">
           <Suspense fallback={null}>
             <DashboardPage />
           </Suspense>
         </Route>
-        <Route path="/stats">
+        <Route path="/contests">
           <Suspense fallback={null}>
-            <StatsPage />
+            <ContestsPage />
           </Suspense>
         </Route>
-        <Route path="/problems">
+        <Route path="/resources">
+          <Suspense fallback={null}>
+            <ResourcesPage />
+          </Suspense>
+        </Route>
+        {/* Stats is a tab of the profile. */}
+        <Route path="/stats">
+          <Redirect to="/profile?tab=stats" replace />
+        </Route>
+        <Route path="/history">
           <Suspense fallback={null}>
             <ProblemsPage />
           </Suspense>
         </Route>
-        <Route>
+        {/* The sheet is the home page. */}
+        <Route path="/sheet">
+          <Redirect to="/" replace />
+        </Route>
+        {/* Earlier addresses. */}
+        <Route path="/dashboard">
+          <Redirect to="/profile" replace />
+        </Route>
+        <Route path="/problems">
+          <Redirect to="/history" replace />
+        </Route>
+        <Route path="/editor">
           <Editor />
+        </Route>
+        {/* The home page: the practice sheet. */}
+        <Route path="/">
+          <Suspense fallback={null}>
+            <SheetPage />
+          </Suspense>
+        </Route>
+        {/* Any address the app doesn't know. */}
+        <Route>
+          <Redirect to="/" replace />
         </Route>
       </Switch>
       <Toaster theme={themeById(theme).dark ? 'dark' : 'light'} position="top-center" offset={60} richColors />

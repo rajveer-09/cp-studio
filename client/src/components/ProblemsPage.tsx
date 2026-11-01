@@ -140,7 +140,7 @@ function EmptyHistory() {
         className="mt-5"
         onClick={() => {
           useStore.setState({ bottomTab: 'problem' });
-          navigate('/');
+          navigate('/editor');
         }}
       >
         Import a problem
@@ -207,7 +207,7 @@ function History() {
     setOpening(key);
     try {
       await reopenProblem(p.platform, p.id);
-      navigate('/');
+      navigate('/editor');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not open this problem.');
       setOpening(null);
@@ -232,8 +232,8 @@ function History() {
     <div className="mx-auto w-full max-w-[1080px] px-4 py-8 sm:px-8 sm:py-10">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.02em]">Problems</h1>
-          <p className="mt-1.5 text-[14px] text-muted">Everything you’ve worked on in CP Studio, with the code you wrote for it.</p>
+          <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.02em]">History</h1>
+          <p className="mt-1.5 text-[14px] text-muted">Every problem you’ve worked on in CP Studio, with the code you wrote for it.</p>
         </div>
       </div>
 
@@ -391,7 +391,7 @@ function History() {
       </div>
       {problems && problems.length > 0 && (
         <p className="mt-3 text-[12px] text-subtle">
-          Solved means every sample test passed in CP Studio. Accepted comes from the judge, for accounts linked on the dashboard. Submitted means you opened the judge’s submit page from here.
+          Solved means every sample test passed in CP Studio. Accepted comes from the judge, for accounts linked on your profile. Submitted means you opened the judge’s submit page from here.
         </p>
       )}
     </div>
@@ -401,8 +401,8 @@ function History() {
 export default function ProblemsPage() {
   const status = useStore((s) => s.account.status);
   return (
-    <PageShell title="Problems">
-      {status === 'signedIn' ? <History /> : status === 'signedOut' ? <SignInNeeded what="your problems" /> : null}
+    <PageShell title="History">
+      {status === 'signedIn' ? <History /> : status === 'signedOut' ? <SignInNeeded what="your history" /> : null}
     </PageShell>
   );
 }

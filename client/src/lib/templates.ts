@@ -1,7 +1,7 @@
 import type { Language, Template } from '../types';
 
 // The "Multi-test" templates read the number of test cases and call solve() for each one;
-// the solution itself is left to write.
+// the solution itself is left to write. Templates carry no comments: the code is all yours.
 
 const CPP_MULTI = `#include <bits/stdc++.h>
 using namespace std;
@@ -10,7 +10,6 @@ using ll = long long;
 #define all(x) (x).begin(), (x).end()
 
 void solve() {
-    // write your code here
 
 }
 
@@ -28,16 +27,13 @@ int main() {
 const CPP_LONG_LONG = `#include <bits/stdc++.h>
 using namespace std;
 
-// Every int is 64-bit, so sums and products of large values don't overflow.
 #define int long long
 #define all(x) (x).begin(), (x).end()
 
 void solve() {
-    // write your code here
 
 }
 
-// main() must return a plain int, which "#define int" would change, so it is declared signed.
 signed main() {
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
@@ -63,8 +59,6 @@ const ll INF = 4e18;
 int main() {
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
-
-    // your code here
 
     return 0;
 }
@@ -117,7 +111,6 @@ public class Main {
     static final PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(System.out)));
 
     static void solve() {
-        // write your code here: read with in.nextInt(), print with out.println()
 
     }
 
@@ -140,7 +133,6 @@ public class Main {
     static final int MOD = 1_000_000_007;
 
     public static void main(String[] args) {
-        // your code here
 
         out.flush();
     }
@@ -164,7 +156,6 @@ input = sys.stdin.readline
 
 
 def solve():
-    # write your code here
     pass
 
 
@@ -197,7 +188,6 @@ def main():
         return data[pos - 1]
 
     out = []
-    # your code here: read with int(nxt()), append answers to out
 
     sys.stdout.write("\\n".join(map(str, out)) + "\\n")
 
@@ -233,27 +223,37 @@ export const DEFAULT_CODE: Record<Language, string> = {
   python: PYTHON_MULTI,
 };
 
-// solve() bodies: today's, and the first templates' (which printed the max of an array).
-const SOLVE_BODIES: Record<Language, { now: string; old: string }> = {
+// Multi-test solve() bodies: today's, and earlier versions (a comment; the very first printed the max of an array).
+const SOLVE_BODIES: Record<Language, { head: string; now: string; earlier: string[] }> = {
   cpp: {
-    now: '    // write your code here\n\n',
-    old: "    int n;\n    cin >> n;\n    vector<ll> a(n);\n    for (auto &x : a) cin >> x;\n\n    cout << *max_element(all(a)) << '\\n';\n",
+    head: 'void solve() {\n',
+    now: '\n',
+    earlier: [
+      '    // write your code here\n\n',
+      "    int n;\n    cin >> n;\n    vector<ll> a(n);\n    for (auto &x : a) cin >> x;\n\n    cout << *max_element(all(a)) << '\\n';\n",
+    ],
   },
   java: {
-    now: '        // write your code here: read with in.nextInt(), print with out.println()\n\n',
-    old: '        int n = in.nextInt();\n        long best = Long.MIN_VALUE;\n        for (int i = 0; i < n; i++) best = Math.max(best, in.nextLong());\n        out.println(best);\n',
+    head: '    static void solve() {\n',
+    now: '\n',
+    earlier: [
+      '        // write your code here: read with in.nextInt(), print with out.println()\n\n',
+      '        int n = in.nextInt();\n        long best = Long.MIN_VALUE;\n        for (int i = 0; i < n; i++) best = Math.max(best, in.nextLong());\n        out.println(best);\n',
+    ],
   },
   python: {
-    now: '    # write your code here\n    pass\n',
-    old: '    n = int(input())\n    a = list(map(int, input().split()))\n    print(max(a))\n',
+    head: 'def solve():\n',
+    now: '    pass\n',
+    earlier: ['    # write your code here\n    pass\n', '    n = int(input())\n    a = list(map(int, input().split()))\n    print(max(a))\n'],
   },
 };
 
 const normalize = (code: string) => code.replace(/\r\n?/g, '\n').replace(/[ \t]+$/gm, '').trimEnd();
 
-/** A tab still exactly as an old Multi-test template left it gets today's template; edited code is kept. */
+/** A tab still exactly as an earlier Multi-test template left it gets today's template; edited code is kept. */
 export function upgradeUntouchedTemplate(language: Language, code: string): string {
-  const { now, old } = SOLVE_BODIES[language];
-  const oldTemplate = DEFAULT_CODE[language].replace(now, old);
-  return normalize(code) === normalize(oldTemplate) ? DEFAULT_CODE[language] : code;
+  const { head, now, earlier } = SOLVE_BODIES[language];
+  const current = DEFAULT_CODE[language];
+  const untouched = earlier.some((body) => normalize(code) === normalize(current.replace(head + now, head + body)));
+  return untouched ? current : code;
 }

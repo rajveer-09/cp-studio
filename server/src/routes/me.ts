@@ -411,3 +411,16 @@ meRouter.post('/judges/sync', async (req, res) => {
   await Promise.all(rows.map((r) => syncAccount(id, r.platform, r.handle, Number(r.cursor))));
   res.json({ accounts: await accountsOf(id), synced: rows.length });
 });
+
+/** Codeforces problems already solved: accepted by Codeforces (linked account) or every sample passed here. */
+meRouter.get('/solved', async (_req, res) => {
+  const id = userId(res);
+  const [judge, here] = await Promise.all([
+    pool!.query(`select problem_id as id from judge_solve where user_id = $1 and platform = 'codeforces'`, [id]),
+    pool!.query(`select problem_id as id from user_problem where user_id = $1 and platform = 'codeforces' and solved_at is not null`, [id]),
+  ]);
+  res.set('Cache-Control', 'no-store').json({
+    accepted: judge.rows.map((r) => r.id as string),
+    solvedHere: here.rows.map((r) => r.id as string),
+  });
+});

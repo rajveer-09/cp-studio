@@ -60,8 +60,8 @@ function NewTabMenu({ language, taken }: { language: Language; taken: string[] }
       toast.error(`You can have up to ${MAX_FILES} ${LANGUAGE_META[language].label} tabs`);
       return;
     }
-    useStore.getState().addFile(language, { name: nextName(language, taken), code });
-    requestAnimationFrame(() => editorBridge.focus());
+    const id = useStore.getState().addFile(language, { name: nextName(language, taken), code });
+    editorBridge.cursorToStart(language, id);
   };
 
   return (

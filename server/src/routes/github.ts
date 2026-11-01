@@ -23,7 +23,7 @@ function resultPage(result: { token?: string; error?: string }): string {
   const result = ${data};
   try { localStorage.setItem('cp-studio-github-result', JSON.stringify(result)); } catch (e) {}
   if (window.opener) { window.opener.postMessage({ type: 'cp-studio-github' }, location.origin); window.close(); }
-  else location.replace('/');
+  else location.replace('/editor');
 </script></body>`;
 }
 

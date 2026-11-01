@@ -46,8 +46,8 @@ export const toggleTestPanelPosition = () =>
   });
 
 /**
- * Puts the workspace back the way it started: panel sizes (saved by the resizable panels), the test panel at the
- * bottom with its default text size, the top bar and assistant shown, nothing locked or maximized.
+ * Puts the workspace back the way it started: panel sizes (saved by the resizable panels), the test panel beside the
+ * editor with its default text size, the top bar shown and the assistant closed, nothing locked or maximized.
  */
 export function resetLayout() {
   try {
@@ -56,9 +56,9 @@ export function resetLayout() {
     // Storage blocked: the panels still remount at their default sizes for now.
   }
   const { updateSettings } = useStore.getState();
-  updateSettings({ ioPosition: 'bottom', ioFontSize: DEFAULT_SETTINGS.ioFontSize, headerHidden: false, layoutLocked: false });
+  updateSettings({ ioPosition: DEFAULT_SETTINGS.ioPosition, ioFontSize: DEFAULT_SETTINGS.ioFontSize, headerHidden: false, layoutLocked: false });
   // A new epoch remounts the panel groups, so they take their default sizes.
-  useStore.setState((s) => ({ assistantOpen: true, editorFocus: false, layoutEpoch: s.layoutEpoch + 1 }));
+  useStore.setState((s) => ({ assistantOpen: false, editorFocus: false, layoutEpoch: s.layoutEpoch + 1 }));
   toast.success('Layout reset', { id: 'layout-reset', description: 'Panels, the test panel and the top bar are back to their defaults.' });
 }
 

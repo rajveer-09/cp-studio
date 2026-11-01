@@ -1,6 +1,7 @@
 import { activeFileOf, useStore } from '../store';
 import type { Language } from '../types';
 import { monaco } from './monaco';
+import { BUILTIN_TEMPLATES } from './templates';
 import type { Diagnostic } from './diagnostics';
 
 /** Lets non-React code (runner, assistant, shortcuts) talk to the live Monaco editor. */
@@ -30,12 +31,90 @@ function foldHarnessIfNew() {
   for (const delay of [80, 400]) setTimeout(() => ed.getModel() === model && ed.getAction('editor.foldAllMarkerRegions')?.run(), delay);
 }
 
+// Where a template's solution goes: inside solve() if there is one, otherwise main(). The last empty line of
+// that function (or its `pass`) is the spot.
+const SOLVE = /^(\s*)(?:void\s+solve\s*\(|static\s+void\s+solve\s*\(|def\s+solve\s*\()/;
+const MAIN = /^(\s*)(?:(?:int|signed)\s+main\s*\(|public\s+static\s+void\s+main\s*\(|def\s+main\s*\()/;
+const indentOf = (line: string) => /^\s*/.exec(line)![0].length;
+
+function writingSpot(lines: string[]): { line: number; indent: number; pass: boolean } | null {
+  let header = lines.findIndex((l) => SOLVE.test(l));
+  if (header < 0) header = lines.findIndex((l) => MAIN.test(l));
+  if (header < 0) return null;
+  const indent = indentOf(lines[header]);
+  let end = lines.length;
+  let pass = -1;
+  let blank = -1;
+  let lastCode = header;
+  for (let i = header + 1; i < lines.length; i++) {
+    const text = lines[i].trim();
+    if (text && indentOf(lines[i]) <= indent) {
+      end = i; // the function ends: its '}' or the next definition
+      break;
+    }
+    if (text === 'pass') pass = i;
+    if (!text) blank = i;
+    else lastCode = i;
+  }
+  // Without a closing brace (Python), blank lines at the end are between functions, not inside this one.
+  const closes = lines[end]?.trim().startsWith('}');
+  if (!closes && blank > lastCode) {
+    blank = -1;
+    for (let i = lastCode - 1; i > header; i--) {
+      if (!lines[i].trim()) {
+        blank = i;
+        break;
+      }
+    }
+  }
+  const spot = pass >= 0 ? pass : blank;
+  return spot < 0 ? null : { line: spot + 1, indent: indent + 4, pass: spot === pass };
+}
+
+/** Tabs waiting for their cursor to be placed once they are shown (a new tab's editor appears a moment later). */
+const cursorPending = new Set<string>();
+
+function placeCursor(ed: monaco.editor.IStandaloneCodeEditor) {
+  const model = ed.getModel();
+  if (!model) return;
+  const spot = writingSpot(model.getLinesContent());
+  if (!spot) return;
+  if (spot.pass) {
+    // Python's placeholder is selected, so typing replaces it.
+    const column = model.getLineContent(spot.line).indexOf('pass') + 1;
+    ed.setSelection(new monaco.Selection(spot.line, column, spot.line, column + 4));
+  } else {
+    if (!model.getLineContent(spot.line)) {
+      ed.executeEdits('cp-studio', [{ range: new monaco.Range(spot.line, 1, spot.line, 1), text: ' '.repeat(spot.indent) }]);
+    }
+    ed.setPosition({ lineNumber: spot.line, column: model.getLineMaxColumn(spot.line) });
+  }
+  ed.revealLineInCenterIfOutsideViewport(spot.line);
+  ed.focus();
+}
+
 export const editorBridge = {
   attach(instance: monaco.editor.IStandaloneCodeEditor) {
     editor = instance;
     debugDecorations = instance.createDecorationsCollection();
-    instance.onDidChangeModel(foldHarnessIfNew);
+    instance.onDidChangeModel(() => {
+      foldHarnessIfNew();
+      const path = instance.getModel()?.uri.path.replace(/^\//, '');
+      if (path && cursorPending.delete(path)) placeCursor(instance);
+    });
     foldHarnessIfNew();
+    // A fresh workspace opens with the cursor where the solution goes.
+    const code = instance.getModel()?.getValue() ?? '';
+    // After the editor's own listeners are attached, so the status bar sees the move.
+    if (BUILTIN_TEMPLATES.some((t) => t.code === code)) setTimeout(() => placeCursor(instance), 0);
+  },
+
+  /** Puts the cursor where the solution goes in a template (now, or when that tab is next shown). */
+  cursorToStart(language: Language, fileId = activeFileOf(useStore.getState(), language).id) {
+    const model = modelFor(language, fileId);
+    // After a moment, so a menu or dialog that just closed doesn't take the focus back.
+    if (editor && model && editor.getModel() === model) setTimeout(() => editor && placeCursor(editor), 30);
+    else cursorPending.add(modelPath(language, fileId));
   },
 
   /** Folds the harness regions of a tab again (after its code was replaced), now or when it is next shown. */

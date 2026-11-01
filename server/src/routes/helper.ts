@@ -10,7 +10,7 @@ import { siteOrigin } from '../config.js';
 export const helperRouter = Router();
 
 /** Bump to make installed copies update themselves. */
-const VERSION = '1.0';
+const VERSION = '1.1';
 
 // Plain JavaScript that runs in the judge's page, kept free of backticks and template placeholders.
 const SCRIPT = String.raw`(() => {
@@ -341,6 +341,76 @@ const SCRIPT = String.raw`(() => {
     keep(pending.code);
   }
 
+  // "Solve" on CP Studio's practice sheet opens a Codeforces problem with #cp-studio-import: the statement is read
+  // from the page (as the "Send to CP Studio" bookmark does) and taken back to CP Studio.
+  const IMPORT_KEY = 'cp-studio-import';
+  function importWanted() {
+    if (!/(^|\.)codeforces\.com$/.test(location.hostname)) return false;
+    if (location.hash === '#cp-studio-import') {
+      history.replaceState(history.state, '', location.pathname + location.search);
+      let from = '';
+      try {
+        from = new URL(document.referrer).origin;
+      } catch (e) {}
+      if (from === APP_ORIGIN) {
+        try {
+          sessionStorage.setItem(IMPORT_KEY, JSON.stringify({ path: location.pathname, at: Date.now() }));
+        } catch (e) {}
+      }
+    }
+    // Kept for a little while, so the import survives a "checking your browser" page in between.
+    try {
+      const wanted = JSON.parse(sessionStorage.getItem(IMPORT_KEY) || 'null');
+      return Boolean(wanted) && wanted.path === location.pathname && Date.now() - wanted.at < 2 * 60 * 1000;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function readProblem() {
+    const s = document.querySelector('.problem-statement');
+    if (!s) return null;
+    const read = (p) => {
+      const c = p.cloneNode(true);
+      c.querySelectorAll('br').forEach((b) => b.replaceWith('\n'));
+      const lines = c.querySelectorAll('.test-example-line');
+      return (lines.length ? Array.from(lines).map((x) => x.textContent).join('\n') : c.textContent).replace(/\r/g, '');
+    };
+    const ins = Array.from(s.querySelectorAll('.sample-test .input pre')).map(read);
+    const outs = Array.from(s.querySelectorAll('.sample-test .output pre')).map(read);
+    const c = s.cloneNode(true);
+    c.querySelectorAll('script[type^="math/tex"]').forEach((m) => m.replaceWith('$$$' + m.textContent + '$$$'));
+    c.querySelectorAll('.MathJax,.MathJax_Preview,.MathJax_Display,.MJX_Assistive_MathML,.header,.sample-tests').forEach((e) => e.remove());
+    const h = s.querySelector('.header');
+    const text = (x) => ((h && h.querySelector(x)) || {}).textContent || '';
+    return {
+      url: location.href,
+      title: text('.title') || document.title,
+      timeLimit: text('.time-limit'),
+      html: c.innerHTML,
+      tests: ins.map((x, i) => ({ input: x, expected: outs[i] || '' })),
+    };
+  }
+
+  if (importWanted()) {
+    const send = async () => {
+      const problem = await waitFor(readProblem, 8000);
+      if (!problem) {
+        note("Couldn't read this problem", 'Sign in to Codeforces if it asks, then press Solve in CP Studio again.', { error: true, sticky: true });
+        return;
+      }
+      try {
+        sessionStorage.removeItem(IMPORT_KEY);
+      } catch (e) {}
+      note('Sending to CP Studio', problem.title, {});
+      // CP Studio hands it to the tab that asked for it, and this tab closes.
+      location.replace(APP_ORIGIN + '/editor#import=' + encodeURIComponent(JSON.stringify(problem)));
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', send, { once: true });
+    else send();
+    return;
+  }
+
   const { pending, refused } = readPending();
   const site = SITES.find((s) => s.host.test(location.hostname) && s.page.test(location.pathname));
   // Not on the submit page (e.g. the sign-in page first): the code waits in this tab until it is.
@@ -357,7 +427,7 @@ function userscript(origin: string): string {
     '// @name         CP Studio helper',
     '// @namespace    cp-studio',
     `// @version      ${VERSION}`,
-    `// @description  "Submit on ..." in CP Studio opens the judge with your code in its editor and the language picked.`,
+    `// @description  "Submit on ..." in CP Studio opens the judge with your code in its editor and the language picked; "Solve" on the practice sheet brings Codeforces statements in.`,
     '// @author       Rajveer Sharma',
     '// @match        https://codeforces.com/*',
     '// @match        https://*.codeforces.com/*',

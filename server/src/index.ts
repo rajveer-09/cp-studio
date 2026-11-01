@@ -13,6 +13,7 @@ import { keyStatus, MODELS } from './ai/keys.js';
 import { auth, migrateAuth, requireUser, socialLogins } from './auth.js';
 import { aiEnabled, config, githubEnabled } from './config.js';
 import { aiRouter } from './routes/ai.js';
+import { contestsRouter } from './routes/contests.js';
 import { debugRouter } from './routes/debug.js';
 import { githubRouter } from './routes/github.js';
 import { helperRouter } from './routes/helper.js';
@@ -80,6 +81,7 @@ app.post('/api/access-key/check', (_req, res) => res.json({ ok: true }));
 app.use('/api/run', limiter(90, 'run'), runRouter);
 app.use('/api/debug', limiter(30, 'debug'), debugRouter);
 app.use('/api/problems', limiter(30, 'import'), problemsRouter);
+app.use('/api/contests', limiter(60, 'contests'), contestsRouter);
 // Your synced workspace and problem history (saves are debounced, so this limit is generous).
 app.use('/api/me', limiter(240, 'sync'), requireUser('your account'), meRouter);
 // The AI needs an account (when accounts are on): it keeps the shared Gemini quota for people who signed up.

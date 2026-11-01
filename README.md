@@ -20,6 +20,20 @@ Run code against test cases like an online judge, step through it with a debugge
 
 ## Features
 
+The home page (`/`) is the **practice sheet**. The **Home** · **Contests** · **Resources** · **History** · **Profile** tabs and **Open editor** (`/editor`) link everything.
+
+### Practice sheet
+**Home** (`/`, also **Sheet** in the editor's top bar) is a topic-wise roadmap of 272 Codeforces problems rated 1100–1800, in 22 steps from arrays to graphs, easy to hard within each step.
+- **Solve** opens the problem in CP Studio's editor, in its own tab with the rating, topics and the sheet's hint (behind a spoiler). With the CP Studio helper installed, the statement and samples arrive by themselves; otherwise the Problem tab shows the one-click **Send to CP Studio** bookmark. **Codeforces ↗** opens the problem on Codeforces.
+- Track each problem as **To do**, **Attempted**, **Solved** or **Revisit**, star it, and keep a note. Signed in, problems Codeforces accepted (from your linked profile) and problems whose samples all passed here count as solved by themselves.
+- A LeetCode-style progress chart (one ring split into Easy / Medium / Hard, with each level's count; hover a level for its share), **Up next** (the first unsolved problem), search and filters by rating, level and status, an **All problems** view sorted by rating, and **Pick for me** for a random unsolved one. Progress is saved in the browser, and to your account when signed in.
+
+### Contests
+**Contests** (`/contests`) lists upcoming and running contests on Codeforces, CodeChef, LeetCode and AtCoder for the next five weeks, by day in your time zone. The next round gets a live countdown; week-long contests sit under **Running now**. Filter by judge (remembered), open a contest, or **Add to calendar** (Google Calendar, or an `.ics` file with a 15-minute reminder). The server reads Codeforces’ and LeetCode’s APIs, CodeChef’s contest list and AtCoder’s contests page, caches each for 30 minutes, and says which judge couldn’t be reached instead of failing.
+
+### Resources
+**Resources** (`/resources`) is a curated list of well-known places to learn and practice (USACO Guide, CP-Algorithms, CSES, Codeforces EDU, AtCoder’s DP contest, KACTL, YouTube channels, tools like Competitive Companion and Carrot), by category and level, with search.
+
 ### Import problems
 - **Fetch a problem by its number or URL:**
   - **CodeChef:** `FLOW001`
@@ -28,7 +42,7 @@ Run code against test cases like an online judge, step through it with a debugge
 
   You get the statement, with math typeset (KaTeX) as on the judge's site, plus the sample tests and the time limit. An import can be undone.
 - **Submit on Codeforces / CodeChef / LeetCode / AtCoder** copies your code (for LeetCode, just the `Solution` class) and opens the judge's submit page with the problem selected.
-- **Auto-fill on the judge:** with the optional CP Studio helper (a userscript for Tampermonkey or Violentmonkey, installed once from **Auto-fill** next to the Submit button), the judge's page opens with your code already in its editor and the language picked. It keeps the compiler you chose there before (otherwise the newest G++, Java 21, or PyPy 3). You still press Submit yourself. The code travels in the link's `#fragment`, which never reaches a server, and the helper only accepts it from CP Studio.
+- **Auto-fill on the judge:** with the optional CP Studio helper (a userscript for Tampermonkey or Violentmonkey, installed once from **Auto-fill** next to the Submit button), the judge's page opens with your code already in its editor and the language picked. It keeps the compiler you chose there before (otherwise the newest G++, Java 21, or PyPy 3). You still press Submit yourself. The code travels in the link's `#fragment`, which never reaches a server, and the helper only accepts it from CP Studio. Since version 1.1 it also brings Codeforces statements in when you press **Solve** on the practice sheet.
 - The sample tests appear under the statement as **Input / Output** cards with copy buttons. They are also loaded as your test cases, and **Use as test cases** puts them back after you've changed them.
 - **Codeforces** blocks automated downloads, so a one-click **Send to CP Studio** bookmark reads the problem from the page you have open.
 - **LeetCode** problems are methods rather than programs. Importing one opens a tab (e.g. `two-sum.cpp`) in each language holding only the `Solution` class, like on LeetCode (and the AI sees just that). The driver that reads each test and prints the answer in LeetCode's format is added when the code runs or is debugged, and errors still point at the right lines; the Problem settings can show it in the tab instead, built from LeetCode's own type information (no AI needed). Design problems such as `LRUCache` get an AI-written `main()` via **Starter + main()**.
@@ -52,10 +66,10 @@ Run code against test cases like an online judge, step through it with a debugge
 - The editor, running and debugging work without an account. **The AI assistant needs one**, which keeps the shared Gemini quota for people who signed up.
 - Accounts turn on when `DATABASE_URL` is set; the tables are created on first start.
 - **Your work follows you:** signed in, your tabs, tests, saved templates and settings are saved to your account as you type and load on any device. Code written before signing up moves into the new account. Signing out leaves this browser with a fresh workspace.
-- **Dashboard** (account menu): your **coding streak** (days in a row you ran code) and **solving streak** (days you solved a problem), with the longest of each; problems solved; **practice sessions** (coding with no problem loaded); a year-long activity heatmap; solved and opened per judge; runs per language; recent problems. Days follow your own time zone.
-- **Judge profiles** (on the dashboard): link your Codeforces, LeetCode, CodeChef and AtCoder usernames and the judges' accepted solutions count too: in **Problems solved**, the heatmap and your streaks, with ratings, ranks and LeetCode's Easy / Medium / Hard split. Only public profile data is read: Codeforces through its official API, AtCoder through AtCoder Problems, LeetCode through its public profile, CodeChef from the profile page (totals only). Profiles refresh every 6 hours when you open the dashboard, or with **Sync now**. Problems the judge accepted show as **Accepted** in Problems.
-- **Stats** (account menu): a **rating graph** for each linked judge (every rated contest, the peak marked, hover for the contest), current and best rating, Codeforces rank and LeetCode's global standing; LeetCode's **Easy / Medium / Hard** donut; Codeforces problems solved **per problem rating**; and problems solved **per topic** (Codeforces tags, LeetCode topics).
-- **Problems** (account menu): every problem you opened, with **Solved** (all sample tests passed), **Attempted** and **Submitted**, the judge, languages and when. Search, filter, and click one to reopen it with your tests and the code you wrote.
+- **Profile** (`/profile`, the Profile tab or the account menu) has two tabs. **Overview:** your **coding streak** (days in a row you ran code) and **solving streak** (days you solved a problem), with the longest of each; problems solved; **practice sessions** (coding with no problem loaded); a year-long activity heatmap; solved and opened per judge; runs per language; recent problems. Days follow your own time zone.
+- **Judge profiles** (on your profile): link your Codeforces, LeetCode, CodeChef and AtCoder usernames and the judges' accepted solutions count too: in **Problems solved**, the heatmap and your streaks, with ratings, ranks and LeetCode's Easy / Medium / Hard split. Only public profile data is read: Codeforces through its official API, AtCoder through AtCoder Problems, LeetCode through its public profile, CodeChef from the profile page (totals only). Profiles refresh every 6 hours when you open your profile, or with **Sync now**. Problems the judge accepted show as **Accepted** in History.
+- **Stats** (the second tab of Profile, `/profile?tab=stats`): a **rating graph** for each linked judge (every rated contest, the peak marked, hover for the contest), current and best rating, Codeforces rank and LeetCode's global standing; LeetCode's **Easy / Medium / Hard** donut; Codeforces problems solved **per problem rating**; and problems solved **per topic** (Codeforces tags, LeetCode topics).
+- **History** (account menu, or the History tab): every problem you opened, with **Solved** (all sample tests passed), **Attempted** and **Submitted**, the judge, languages and when. Search, filter, and click one to reopen it with your tests and the code you wrote.
 
 ### AI assistant (Google Gemini)
 - It sees your code, your selection, the problem statement, your test cases, their outputs and any errors.

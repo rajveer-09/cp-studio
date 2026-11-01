@@ -369,6 +369,7 @@ export function ResetDialog() {
   const reset = () => {
     const template = templates.find((t) => t.id === templateId) ?? templates[0];
     editorBridge.setCode(language, template.code);
+    editorBridge.cursorToStart(language);
     if (clearTests) {
       const id = uid();
       useStore.setState({

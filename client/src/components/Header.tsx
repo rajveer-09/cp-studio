@@ -1,7 +1,8 @@
-import { AlertTriangle, ChartLine, ChevronDown, Expand, FileCode2, Keyboard, LayoutDashboard, ListChecks, Lock, LockOpen, ListTodo, LogIn, LogOut, PanelTopClose, Play, Save, Settings, Shrink, Sparkles, Trash2 } from 'lucide-react';
+import { AlertTriangle, BookOpen, Check, ChevronDown, Expand, FileCode2, Keyboard, History, ListChecks, Lock, LockOpen, LogIn, LogOut, PanelTopClose, Play, Save, Settings, Shrink, Sparkles, Trash2, Trophy, UserRound } from 'lucide-react';
 import { DropdownMenu } from 'radix-ui';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { Link } from 'wouter';
 import { navigate } from 'wouter/use-browser-location';
 import { goToSignIn, signOut } from '../lib/auth';
 import { editorBridge } from '../lib/editor';
@@ -11,7 +12,7 @@ import { keyLabel } from '../lib/platform';
 import { runTests } from '../lib/runner';
 import { BUILTIN_TEMPLATES } from '../lib/templates';
 import { useStore } from '../store';
-import type { AccountUser, Template } from '../types';
+import type { AccountUser, Language, Template } from '../types';
 import { AppModeSwitch } from './ThemePicker';
 import { Timer } from './Timer';
 import { Button, cn, Kbd, Tip } from './ui';
@@ -37,33 +38,61 @@ function LanguageSwitcher() {
   const setLanguage = useStore((s) => s.setLanguage);
   const toolchains = useStore((s) => s.serverConfig?.toolchains);
 
+  const current = LANGUAGE_META[language];
+  const currentMissing = toolchains && !toolchains[language].available;
+
   return (
-    <div className="flex items-center rounded-lg border border-line bg-panel p-0.5">
-      {LANGUAGES.map((lang, i) => {
-        const meta = LANGUAGE_META[lang];
-        const missing = toolchains && !toolchains[lang].available;
-        return (
-          <Tip
-            key={lang}
-            label={missing ? `${meta.label} is not installed on the server` : toolchains?.[lang].version || meta.label}
-            keys={['Alt', String(i + 1)]}
+    <DropdownMenu.Root>
+      <Tip label="Language" keys={['Alt', '1 · 2 · 3']}>
+        <DropdownMenu.Trigger asChild>
+          <button
+            type="button"
+            aria-label={`Language: ${current.label}`}
+            className="flex h-8 shrink-0 items-center gap-2 rounded-lg border border-line bg-panel pr-2 pl-3 text-[13px] font-medium transition outline-none hover:border-line-strong hover:bg-hover focus-visible:border-accent/60 data-[state=open]:border-line-strong data-[state=open]:bg-hover"
           >
-            <button
-              type="button"
-              onClick={() => setLanguage(lang)}
-              className={cn(
-                'flex h-7 items-center gap-1.5 rounded-md px-2 text-[13px] font-medium transition sm:px-2.5',
-                lang === language ? 'bg-panel-2 text-fg shadow-sm ring-1 ring-line' : 'text-muted hover:text-fg',
-              )}
-            >
-              <span className="size-2 rounded-full" style={{ background: meta.color }} />
-              {meta.label}
-              {missing && <AlertTriangle className="hidden size-3 text-warning sm:block" />}
-            </button>
-          </Tip>
-        );
-      })}
-    </div>
+            <span className="size-2 rounded-full" style={{ background: current.color }} />
+            {current.label}
+            {currentMissing && <AlertTriangle className="size-3 text-warning" />}
+            <ChevronDown className="size-3.5 text-subtle" />
+          </button>
+        </DropdownMenu.Trigger>
+      </Tip>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content align="start" sideOffset={6} className="popover z-50 w-80 rounded-xl border border-line bg-panel p-1.5 shadow-pop">
+          <DropdownMenu.RadioGroup value={language} onValueChange={(v) => setLanguage(v as Language)}>
+            {LANGUAGES.map((lang, i) => {
+              const meta = LANGUAGE_META[lang];
+              const info = toolchains?.[lang];
+              const missing = info && !info.available;
+              return (
+                <DropdownMenu.RadioItem
+                  key={lang}
+                  value={lang}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 outline-none data-[highlighted]:bg-hover"
+                >
+                  <span className="size-2 shrink-0 rounded-full" style={{ background: meta.color }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5 text-[13px] font-medium">
+                      {meta.label}
+                      {missing && <AlertTriangle className="size-3 text-warning" />}
+                    </span>
+                    <span className={cn('block truncate text-[11.5px]', missing ? 'text-warning' : 'text-subtle')}>
+                      {missing ? 'Not installed on the server' : info?.version || meta.label}
+                    </span>
+                  </span>
+                  <Kbd keys={['Alt', String(i + 1)]} />
+                  <span className="w-3.5 shrink-0">
+                    <DropdownMenu.ItemIndicator>
+                      <Check className="size-3.5 text-accent" />
+                    </DropdownMenu.ItemIndicator>
+                  </span>
+                </DropdownMenu.RadioItem>
+              );
+            })}
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
 
@@ -81,7 +110,7 @@ function TemplateMenu() {
 
   const load = (template: Template) => {
     editorBridge.setCode(language, template.code);
-    editorBridge.focus();
+    editorBridge.cursorToStart(language);
     toast.success(`Loaded “${template.name}”`, { description: `Press ${keyLabel('Mod')}+Z to undo.` });
   };
 
@@ -210,22 +239,30 @@ export function AccountMenu() {
             <AppModeSwitch />
           </div>
           <DropdownMenu.Separator className="mb-1.5 h-px bg-line" />
-          <DropdownMenu.Item onSelect={() => navigate('/dashboard')} className={cn(menuItem, 'text-[13px]')}>
-            <LayoutDashboard className="size-3.5 text-muted" />
-            Dashboard
+          <DropdownMenu.Item onSelect={() => navigate('/')} className={cn(menuItem, 'text-[13px]')}>
+            <ListChecks className="size-3.5 text-muted" />
+            Home
           </DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={() => navigate('/stats')} className={cn(menuItem, 'text-[13px]')}>
-            <ChartLine className="size-3.5 text-muted" />
-            Stats
+          <DropdownMenu.Item onSelect={() => navigate('/contests')} className={cn(menuItem, 'text-[13px]')}>
+            <Trophy className="size-3.5 text-muted" />
+            Contests
           </DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={() => navigate('/problems')} className={cn(menuItem, 'text-[13px]')}>
-            <ListTodo className="size-3.5 text-muted" />
-            Problems
+          <DropdownMenu.Item onSelect={() => navigate('/resources')} className={cn(menuItem, 'text-[13px]')}>
+            <BookOpen className="size-3.5 text-muted" />
+            Resources
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => navigate('/history')} className={cn(menuItem, 'text-[13px]')}>
+            <History className="size-3.5 text-muted" />
+            History
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => navigate('/profile')} className={cn(menuItem, 'text-[13px]')}>
+            <UserRound className="size-3.5 text-muted" />
+            Profile
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() => {
               // Settings live in the editor.
-              if (location.pathname !== '/') navigate('/');
+              if (location.pathname !== '/editor') navigate('/editor');
               useStore.getState().openDialog('settings');
             }}
             className={cn(menuItem, 'text-[13px]')}
@@ -262,14 +299,22 @@ export function Header() {
 
   return (
     <header className="flex h-13 shrink-0 items-center gap-1.5 overflow-x-auto px-2 sm:gap-3 sm:px-3">
-      <div className="hidden items-center gap-2 pr-1 text-fg sm:flex">
-        <Logo />
-        <span className="hidden text-[15px] font-semibold tracking-[-0.015em] whitespace-nowrap lg:block">
-          CP <span className="font-medium text-muted">Studio</span>
-        </span>
-      </div>
+      <Tip label="Home">
+        <Link href="/" className="hidden items-center gap-2 rounded-md pr-1 text-fg sm:flex">
+          <Logo />
+          <span className="hidden text-[15px] font-semibold tracking-[-0.015em] whitespace-nowrap lg:block">
+            CP <span className="font-medium text-muted">Studio</span>
+          </span>
+        </Link>
+      </Tip>
       <LanguageSwitcher />
       <TemplateMenu />
+      <Tip label="Practice sheet: 272 Codeforces problems, topic by topic">
+        <Button variant="ghost" onClick={() => navigate('/')} className="shrink-0">
+          <ListChecks />
+          <span className="hidden xl:inline">Sheet</span>
+        </Button>
+      </Tip>
 
       <div className="flex-1" />
 

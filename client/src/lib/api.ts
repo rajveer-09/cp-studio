@@ -210,7 +210,26 @@ export interface FixResponse {
   fixedCode: string;
 }
 
+export interface Contest {
+  platform: Platform;
+  id: string;
+  name: string;
+  url: string;
+  /** Start, in ms since the epoch. */
+  start: number;
+  durationSeconds: number;
+  kind?: string;
+  rated?: string;
+}
+
+export interface ContestList {
+  contests: Contest[];
+  sources: Record<Platform, 'ok' | 'error'>;
+  now: number;
+}
+
 export const api = {
+  contests: () => request<ContestList>('GET', '/contests'),
   me: {
     workspace: () => request<RemoteWorkspace | null>('GET', '/me/workspace'),
     saveWorkspace: (data: unknown) => request<{ updatedAt: string }>('PUT', '/me/workspace', { data }),
@@ -218,6 +237,7 @@ export const api = {
     problem: (platform: Platform, id: string) => request<ProblemSnapshot>('GET', `/me/problems/${platform}/${encodeURIComponent(id)}`),
     removeProblem: (platform: Platform, id: string) => request<{ ok: true }>('DELETE', `/me/problems/${platform}/${encodeURIComponent(id)}`),
     problemEvent: (event: ProblemEvent) => request<{ ok: true }>('POST', '/me/problems/events', event),
+    solved: () => request<{ accepted: string[]; solvedHere: string[] }>('GET', '/me/solved'),
     activity: (event: ActivityEvent) => request<{ ok: true }>('POST', '/me/activity', event),
     judges: () => request<{ accounts: JudgeAccount[] }>('GET', '/me/judges'),
     linkJudge: (platform: Platform, handle: string) => request<{ accounts: JudgeAccount[] }>('PUT', '/me/judges/' + platform, { handle }),

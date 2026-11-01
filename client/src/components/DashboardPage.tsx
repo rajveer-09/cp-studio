@@ -1,6 +1,6 @@
 import { ArrowRight, CheckCircle2, CircleDashed, Code2, Flame, Target } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link, useLocation } from 'wouter';
+import { Link, useLocation, useSearch } from 'wouter';
 import { api, type Dashboard } from '../lib/api';
 import { LANGUAGE_META } from '../lib/languages';
 import { PLATFORM_META, PLATFORM_ORDER, reopenProblem } from '../lib/problems';
@@ -9,6 +9,7 @@ import { Bars } from './charts';
 import { JudgeProfiles } from './JudgeProfiles';
 import { PageShell, SignInNeeded } from './PageShell';
 import { PLATFORM_COLORS, relativeTime } from './ProblemsPage';
+import { StatsTab } from './StatsPage';
 import { cn } from './ui';
 
 const WEEKS = 53;
@@ -218,7 +219,7 @@ function Overview() {
     });
   }, [load]);
 
-  if (failed) return <p className="mt-24 text-center text-[14px] text-muted">Couldn’t load your dashboard. Check your connection and reload.</p>;
+  if (failed) return <p className="mt-24 text-center text-[14px] text-muted">Couldn’t load your profile. Check your connection and reload.</p>;
   if (!data) {
     return (
       <div className="mx-auto w-full max-w-[1080px] px-4 py-10 sm:px-8">
@@ -262,7 +263,7 @@ function Overview() {
                 : 'Run some code today to start a new streak.'}
           </p>
         </div>
-        <Link href="/" className="btn-primary inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] font-medium">
+        <Link href="/editor" className="btn-primary inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] font-medium">
           Continue coding
           <ArrowRight className="size-4" />
         </Link>
@@ -347,7 +348,7 @@ function Overview() {
         title="Recent problems"
         action={
           data.recent.length ? (
-            <Link href="/problems" className="flex items-center gap-1 text-[12.5px] font-medium text-muted hover:text-fg">
+            <Link href="/history" className="flex items-center gap-1 text-[12.5px] font-medium text-muted hover:text-fg">
               View all
               <ArrowRight className="size-3.5" />
             </Link>
@@ -360,7 +361,7 @@ function Overview() {
               <li key={`${p.platform}/${p.id}`}>
                 <button
                   type="button"
-                  onClick={() => reopenProblem(p.platform, p.id).then(() => navigate('/'))}
+                  onClick={() => reopenProblem(p.platform, p.id).then(() => navigate('/editor'))}
                   className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition hover:bg-hover/60"
                 >
                   {p.solvedAt ? <CheckCircle2 className="size-4 shrink-0 text-success" aria-label="Solved" /> : <CircleDashed className="size-4 shrink-0 text-warning" aria-label="Attempted" />}
@@ -382,7 +383,43 @@ function Overview() {
   );
 }
 
-export default function DashboardPage() {
+const TABS = [
+  { id: 'overview', label: 'Overview', href: '/profile' },
+  { id: 'stats', label: 'Stats', href: '/profile?tab=stats' },
+] as const;
+
+/** Your profile: streaks and activity (Overview), and ratings and topics from linked judges (Stats). */
+export default function ProfilePage() {
   const status = useStore((s) => s.account.status);
-  return <PageShell title="Dashboard">{status === 'signedIn' ? <Overview /> : status === 'signedOut' ? <SignInNeeded what="your dashboard" /> : null}</PageShell>;
+  const tab = new URLSearchParams(useSearch()).get('tab') === 'stats' ? 'stats' : 'overview';
+  return (
+    <PageShell title={tab === 'stats' ? 'Stats' : 'Profile'}>
+      {status === 'signedIn' ? (
+        <>
+          <div className="mx-auto w-full max-w-[1080px] px-4 pt-6 sm:px-8">
+            <div role="tablist" aria-label="Profile" className="flex gap-1 border-b border-line">
+              {TABS.map((t) => (
+                <Link
+                  key={t.id}
+                  href={t.href}
+                  role="tab"
+                  aria-selected={tab === t.id}
+                  className={cn(
+                    'relative -mb-px px-3 pt-1 pb-2.5 text-[13.5px] font-medium transition',
+                    tab === t.id ? 'text-fg' : 'text-muted hover:text-fg',
+                  )}
+                >
+                  {t.label}
+                  {tab === t.id && <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent" />}
+                </Link>
+              ))}
+            </div>
+          </div>
+          {tab === 'stats' ? <StatsTab /> : <Overview />}
+        </>
+      ) : status === 'signedOut' ? (
+        <SignInNeeded what="your profile" />
+      ) : null}
+    </PageShell>
+  );
 }

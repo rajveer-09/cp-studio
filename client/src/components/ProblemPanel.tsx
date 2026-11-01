@@ -8,6 +8,8 @@ import {
   ExternalLink,
   FlaskConical,
   Gauge,
+  Lightbulb,
+  Loader2,
   Minus,
   Plus,
   RotateCcw,
@@ -38,6 +40,7 @@ import {
   topicName,
 } from '../lib/problems';
 import { applyDriverVisibility } from '../lib/harness';
+import { helperImports } from '../lib/sheet';
 import { restoreSamples } from '../lib/testcases';
 import { DEFAULT_SETTINGS, useStore } from '../store';
 import type { Platform, ProblemMeta, Settings } from '../types';
@@ -46,7 +49,7 @@ import { Button, cn, Tip } from './ui';
 // Math typesetting (KaTeX) is only downloaded when a statement is shown.
 const Statement = lazy(() => import('./Statement'));
 
-function CodeforcesGuide({ url, onClose }: { url: string; onClose: () => void }) {
+function CodeforcesGuide({ url, onClose }: { url: string; onClose?: () => void }) {
   const link = useRef<HTMLAnchorElement>(null);
   // React refuses to render javascript: URLs, so the bookmark's href is set directly.
   useEffect(() => link.current?.setAttribute('href', bookmarkletHref()), []);
@@ -54,9 +57,11 @@ function CodeforcesGuide({ url, onClose }: { url: string; onClose: () => void })
 
   return (
     <div className="relative mt-2.5 rounded-lg border border-line bg-panel-2/60 p-3 text-[12.5px] leading-relaxed">
-      <button type="button" onClick={onClose} aria-label="Close" className="absolute top-2 right-2 rounded p-0.5 text-subtle hover:text-fg">
-        <X className="size-3.5" />
-      </button>
+      {onClose && (
+        <button type="button" onClick={onClose} aria-label="Close" className="absolute top-2 right-2 rounded p-0.5 text-subtle hover:text-fg">
+          <X className="size-3.5" />
+        </button>
+      )}
       <p className="mb-2 pr-6 text-muted">Codeforces blocks automated downloads, so CP Studio reads the problem from the page you open in your browser:</p>
       <ol className="space-y-1.5">
         <li className="flex flex-wrap items-center gap-1.5">
@@ -503,11 +508,75 @@ const Chip = ({ children }: { children: ReactNode }) => (
 
 /** Enhanced display: the title at the top of the statement, with the facts as chips (like LeetCode's problem page). */
 /** LeetCode's difficulty colors, toned to read on dark and light statement colors alike. */
-const DIFFICULTY_COLORS = { Easy: '#12a89a', Medium: '#d08d00', Hard: '#e2457b' } as const;
+const DIFFICULTY_COLORS = { Easy: '#12a89a', Medium: '#c98500', Hard: '#e2457b' } as const;
+
+/** A practice sheet's hint, behind a spoiler so it's only read when wanted. */
+function HintBox({ hint }: { hint: string }) {
+  return (
+    <p className="mt-2.5 flex gap-2 rounded-lg border border-warning/25 bg-warning/[0.07] px-3 py-2 text-[0.92em] leading-relaxed text-fg">
+      <Lightbulb className="mt-[0.2em] size-[1em] shrink-0 text-warning" />
+      {hint}
+    </p>
+  );
+}
+
+function StandardHint({ hint }: { hint: string }) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="mb-4">
+      <button type="button" onClick={() => setShown((s) => !s)} aria-expanded={shown} className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-warning hover:underline">
+        <Lightbulb className="size-3.5" />
+        {shown ? 'Hide hint' : 'Show hint'}
+      </button>
+      {shown && <HintBox hint={hint} />}
+    </div>
+  );
+}
+
+/** A sheet problem opened before its statement arrived from Codeforces. */
+function StatementPending({ meta }: { meta: ProblemMeta }) {
+  const [helper] = useState(helperImports);
+  return (
+    <div className="rounded-xl border border-line bg-panel-2/40 p-4 text-[13px] leading-relaxed">
+      {helper ? (
+        <>
+          <p className="flex items-center gap-2 font-medium text-fg">
+            <Loader2 className="size-4 animate-spin text-accent" />
+            Getting the statement from Codeforces…
+          </p>
+          <p className="mt-1.5 text-muted">
+            The CP Studio helper opened the problem in a new tab to read it; that tab closes by itself and the statement and samples appear here.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={() => window.open(`${meta.url}#cp-studio-import`, '_blank')}>
+              <RotateCcw />
+              Try again
+            </Button>
+            <span className="text-[12px] text-subtle">Nothing yet? Sign in to Codeforces in that tab first.</span>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="font-medium text-fg">Bring in the statement and samples</p>
+          <CodeforcesGuide url={meta.url} />
+          <p className="mt-3 text-[12.5px] text-muted">
+            Or{' '}
+            <button type="button" onClick={() => useStore.getState().openDialog('submitHelper')} className="font-medium text-accent underline underline-offset-2">
+              install the CP Studio helper
+            </button>{' '}
+            and <b className="font-medium text-fg">Solve</b> on the sheet brings statements in by itself.
+          </p>
+        </>
+      )}
+      <p className="mt-3 border-t border-line pt-3 text-[12.5px] text-subtle">You can start coding now. The samples become your test cases when they arrive.</p>
+    </div>
+  );
+}
 
 function EnhancedTitle({ meta, examples }: { meta: ProblemMeta; examples: number }) {
   const judge = PLATFORM_META[meta.platform].label;
   const [showTopics, setShowTopics] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   return (
     <header className="mb-6">
       <h1 className="text-[1.45em] leading-snug font-semibold tracking-[-0.015em] text-fg">{meta.title}</h1>
@@ -535,6 +604,15 @@ function EnhancedTitle({ meta, examples }: { meta: ProblemMeta; examples: number
             </Chip>
           </button>
         ) : null}
+        {meta.hint && (
+          <button type="button" onClick={() => setShowHint((s) => !s)} aria-expanded={showHint} className="rounded-full">
+            <Chip>
+              <Lightbulb className="text-warning" />
+              Hint
+              <ChevronDown className={cn('transition', showHint && 'rotate-180')} />
+            </Chip>
+          </button>
+        )}
         <Chip>
           <span className="size-2 rounded-full" style={{ background: PLATFORM_COLORS[meta.platform] }} />
           {judge}
@@ -570,6 +648,7 @@ function EnhancedTitle({ meta, examples }: { meta: ProblemMeta; examples: number
           ))}
         </div>
       ) : null}
+      {showHint && meta.hint && <HintBox hint={meta.hint} />}
     </header>
   );
 }
@@ -676,9 +755,14 @@ export function ProblemPanel() {
           ) : (
             <div className={cn('@container', enhanced ? 'mx-auto max-w-[780px] px-6 pt-6 pb-10' : 'max-w-[860px] px-4 pt-4 pb-6')}>
               {enhanced && meta && <EnhancedTitle meta={meta} examples={meta.samples?.length ?? 0} />}
-              <Suspense fallback={<div className="h-40" />}>
-                <Statement content={problem || '_No statement._'} enhanced={enhanced} />
-              </Suspense>
+              {!enhanced && meta?.hint && <StandardHint hint={meta.hint} />}
+              {meta?.platform === 'codeforces' && !problem.trim() ? (
+                <StatementPending meta={meta} />
+              ) : (
+                <Suspense fallback={<div className="h-40" />}>
+                  <Statement content={problem || '_No statement._'} enhanced={enhanced} />
+                </Suspense>
+              )}
               {meta?.samples?.length ? (
                 enhanced ? (
                   <EnhancedSamples samples={meta.samples} inStatement={/^#{3,4} Example\b/m.test(problem)} />

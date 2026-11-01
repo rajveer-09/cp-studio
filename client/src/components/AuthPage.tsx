@@ -356,7 +356,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
               CP <span className="font-medium text-muted">Studio</span>
             </span>
           </Link>
-          <Link href="/" className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-muted transition hover:bg-hover hover:text-fg">
+          <Link href="/editor" className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-muted transition hover:bg-hover hover:text-fg">
             <ArrowLeft className="size-3.5" />
             Back to the editor
           </Link>
@@ -366,7 +366,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
             <div className="max-w-[360px] text-center">
               <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Accounts aren’t set up here</h1>
               <p className="mt-2 text-[14px] text-muted">This server has no database configured, so everything stays in this browser.</p>
-              <Link href="/" className="mt-6 inline-block text-[13px] font-medium text-accent hover:underline">
+              <Link href="/editor" className="mt-6 inline-block text-[13px] font-medium text-accent hover:underline">
                 Back to the editor
               </Link>
             </div>

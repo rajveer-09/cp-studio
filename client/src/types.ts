@@ -31,6 +31,16 @@ export interface TimerState {
   alerted?: boolean;
 }
 
+/** Your progress on a practice-sheet problem. */
+export type SheetStatus = 'todo' | 'attempted' | 'solved' | 'revisit';
+export interface SheetEntry {
+  status: SheetStatus;
+  starred?: boolean;
+  note?: string;
+  /** When the status last changed. */
+  at?: number;
+}
+
 export type Outcome = 'ok' | 'TLE' | 'RE' | 'CE' | 'OLE' | 'IE';
 
 /**
@@ -132,6 +142,8 @@ export interface ImportedProblem {
   tags?: string[];
   /** Codeforces difficulty rating (800, 900, …), once Codeforces publishes it. */
   rating?: number;
+  /** A practice sheet's hint (the key technique), shown behind a spoiler. */
+  hint?: string;
   snippets?: Partial<Record<Language, string>>;
   /** LeetCode: the snippet wrapped in a harness (folded in the editor) that runs one test from stdin. */
   programs?: Partial<Record<Language, string>>;

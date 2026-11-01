@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { navigate } from 'wouter/use-browser-location';
 import { activeFileOf, MAX_FILES, uid, useStore, type AppState } from '../store';
 import type { ImportedProblem, Language, Platform, ProblemMeta } from '../types';
 import { api, type ActivityEvent, type ProblemEvent, type ProblemSnapshot } from './api';
@@ -195,7 +196,8 @@ export function openProblemTabs(
         if (!split) editorBridge.foldHarness(language, existing.id);
       }
     } else if (state.files[language].length < MAX_FILES) {
-      state.addFile(language, split ? { name, code: split.body, harness: split.harness } : { name, code });
+      const id = state.addFile(language, split ? { name, code: split.body, harness: split.harness } : { name, code });
+      if (!split) editorBridge.cursorToStart(language, id);
     } else {
       toast.error(`You have ${MAX_FILES} ${LANGUAGE_META[language].label} tabs open. Close one to open a tab for this problem.`);
       continue;
@@ -243,8 +245,18 @@ export async function importProblem(platform: Platform, ref: string): Promise<bo
 
 async function importCodeforcesPage(page: unknown) {
   try {
-    applyImported(await api.problemFromPage(page));
+    const problem = await api.problemFromPage(page);
+    // A problem opened from a practice sheet keeps the sheet's hint (and rating, topics) when its statement arrives.
+    const previous = useStore.getState().problemMeta;
+    if (previous?.platform === 'codeforces' && previous.id === problem.id) {
+      problem.hint ??= previous.hint;
+      problem.rating ??= previous.rating;
+      if (!problem.tags?.length) problem.tags = previous.tags;
+    }
+    applyImported(problem);
     useStore.setState({ bottomTab: 'problem' });
+    // The problem shows in the editor, wherever this tab was.
+    if (location.pathname !== '/editor') navigate('/editor');
   } catch (err) {
     toast.error(err instanceof Error ? err.message : 'Import failed.');
   }
@@ -255,7 +267,7 @@ async function importCodeforcesPage(page: unknown) {
  * the user has open, reads the statement and samples, and opens CP Studio with them.
  */
 export function bookmarkletHref(): string {
-  const app = `${location.origin}${location.pathname}`;
+  const app = `${location.origin}/editor`;
   const code = `(()=>{const s=document.querySelector('.problem-statement');if(!s||!/codeforces/.test(location.host)){alert('Open a Codeforces problem page, then click this bookmark.');return}const read=p=>{const c=p.cloneNode(true);c.querySelectorAll('br').forEach(b=>b.replaceWith('\\n'));const l=c.querySelectorAll('.test-example-line');return(l.length?[...l].map(x=>x.textContent).join('\\n'):c.textContent).replace(/\\r/g,'')};const ins=[...s.querySelectorAll('.sample-test .input pre')].map(read);const outs=[...s.querySelectorAll('.sample-test .output pre')].map(read);const c=s.cloneNode(true);c.querySelectorAll('script[type^="math/tex"]').forEach(m=>m.replaceWith('$$$'+m.textContent+'$$$'));c.querySelectorAll('.MathJax,.MathJax_Preview,.MathJax_Display,.MJX_Assistive_MathML,.header,.sample-tests').forEach(e=>e.remove());const h=s.querySelector('.header');const t=x=>(h&&h.querySelector(x)||{}).textContent||'';const d={url:location.href,title:t('.title')||document.title,timeLimit:t('.time-limit'),html:c.innerHTML,tests:ins.map((x,i)=>({input:x,expected:outs[i]||''}))};window.open(${JSON.stringify(app)}+'#import='+encodeURIComponent(JSON.stringify(d)),'cp-studio')})()`;
   return `javascript:${encodeURIComponent(code)}`;
 }
@@ -271,7 +283,8 @@ let pendingPage: unknown = null;
 export function consumeImportHash(): Promise<boolean> {
   const match = /^#import=(.+)$/.exec(location.hash);
   if (!match) return Promise.resolve(false);
-  history.replaceState(null, '', location.pathname + location.search);
+  // Imports land in the editor (older bookmarks open the home page's address).
+  history.replaceState(null, '', `/editor${location.search}`);
 
   let page: unknown;
   try {

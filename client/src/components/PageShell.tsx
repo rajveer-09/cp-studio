@@ -6,10 +6,13 @@ import { useStore } from '../store';
 import { AccountMenu, Logo } from './Header';
 import { Button, cn } from './ui';
 
+// Home ("/") is the practice sheet.
 const NAV = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/stats', label: 'Stats' },
-  { href: '/problems', label: 'Problems' },
+  { href: '/', label: 'Home' },
+  { href: '/contests', label: 'Contests' },
+  { href: '/resources', label: 'Resources' },
+  { href: '/history', label: 'History' },
+  { href: '/profile', label: 'Profile' },
 ];
 
 /** The frame for pages outside the editor: brand, navigation, theme and account. */
@@ -26,19 +29,19 @@ export function PageShell({ title, children }: { title: string; children: ReactN
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg text-fg">
       <header className="flex h-14 shrink-0 items-center gap-1 border-b border-line bg-panel/70 px-3 backdrop-blur sm:gap-2 sm:px-5">
-        <Link href="/" className="mr-3 flex items-center gap-2 text-fg">
+        <Link href="/" className="mr-3 flex shrink-0 items-center gap-2 text-fg">
           <Logo />
           <span className="hidden text-[15px] font-semibold tracking-[-0.015em] sm:inline">
             CP <span className="font-medium text-muted">Studio</span>
           </span>
         </Link>
-        <nav className="flex items-center gap-1">
+        <nav className="-my-3 flex min-w-0 items-center gap-1 overflow-x-auto py-3 [scrollbar-width:none]">
           {NAV.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                'relative rounded-md px-2.5 py-1.5 text-[13.5px] font-medium transition',
+                'relative shrink-0 rounded-md px-2.5 py-1.5 text-[13.5px] font-medium transition',
                 location === item.href ? 'text-fg' : 'text-muted hover:bg-hover hover:text-fg',
               )}
             >
@@ -49,7 +52,7 @@ export function PageShell({ title, children }: { title: string; children: ReactN
         </nav>
         <div className="flex-1" />
         <Link
-          href="/"
+          href="/editor"
           className="inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border border-line bg-panel-2 px-3 text-[13px] font-medium transition hover:border-line-strong hover:bg-hover [&_svg]:size-4"
         >
           <Code2 />

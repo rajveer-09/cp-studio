@@ -7,7 +7,6 @@ import { themeById } from '../lib/themes';
 import { useStore } from '../store';
 import type { Platform } from '../types';
 import { Bars, Columns, Donut, RatingChart } from './charts';
-import { PageShell, SignInNeeded } from './PageShell';
 import { PLATFORM_COLORS } from './ProblemsPage';
 import { cn } from './ui';
 
@@ -193,9 +192,9 @@ function Overview() {
         <div className="mt-8 rounded-xl border border-dashed border-line-strong bg-panel px-6 py-14 text-center">
           <h2 className="text-[16px] font-semibold">Link a judge profile first</h2>
           <p className="mx-auto mt-1.5 max-w-[380px] text-[13.5px] text-muted">
-            Add your Codeforces, LeetCode, CodeChef or AtCoder username on the dashboard, and your ratings and topics show up here.
+            Add your Codeforces, LeetCode, CodeChef or AtCoder username on your profile, and your ratings and topics show up here.
           </p>
-          <Link href="/dashboard" className="btn-primary mt-5 inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] font-medium">
+          <Link href="/profile" className="btn-primary mt-5 inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] font-medium">
             Go to Judge profiles
             <ArrowRight className="size-4" />
           </Link>
@@ -255,7 +254,5 @@ function Overview() {
   );
 }
 
-export default function StatsPage() {
-  const status = useStore((s) => s.account.status);
-  return <PageShell title="Stats">{status === 'signedIn' ? <Overview /> : status === 'signedOut' ? <SignInNeeded what="your stats" /> : null}</PageShell>;
-}
+/** The Stats tab of the profile. */
+export const StatsTab = Overview;

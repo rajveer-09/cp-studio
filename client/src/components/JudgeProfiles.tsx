@@ -158,7 +158,7 @@ function JudgeTile({ platform, account, onChange }: { platform: Platform; accoun
   );
 }
 
-/** Link usernames on each judge; their accepted problems then count on the dashboard. */
+/** Link usernames on each judge; their accepted problems then count on the profile. */
 export function JudgeProfiles({ accounts, onChange }: { accounts: JudgeAccount[]; onChange: (accounts: JudgeAccount[]) => void }) {
   const [syncing, setSyncing] = useState(false);
   const sync = async () => {
